@@ -1,4 +1,6 @@
 # Havocompare - a folder comparison utility
+[![Documentation](https://docs.rs/havocompare/badge.svg)](https://docs.rs/havocompare)
+![CI](https://github.com/VolumeGraphics/havocompare/actions/workflows/rust.yml/badge.svg?branch=main "CI")
 
 ## Quickstart
 
