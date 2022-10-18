@@ -1,5 +1,6 @@
 [package]
 name = "havocompare"
+description = "A flexible folder comparison tool / crate with html reporting."
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
