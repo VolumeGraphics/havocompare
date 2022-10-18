@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[allow(clippy::upper_case_acronyms)]
 enum ComparisonMode {
     /// smart CSV compare
     CSV(csv::CSVCompareConfig),
