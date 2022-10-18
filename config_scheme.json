@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Config",
+  "type": "object",
+  "required": [
+    "rules"
+  ],
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Rule"
+      }
+    }
+  },
+  "definitions": {
+    "CSVCompareConfig": {
+      "type": "object",
+      "required": [
+        "comparison_modes"
+      ],
+      "properties": {
+        "comparison_modes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Mode"
+          }
+        },
+        "decimal_separator": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1,
+          "minLength": 1
+        },
+        "exclude_field_regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "field_delimiter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1,
+          "minLength": 1
+        }
+      }
+    },
+    "HTMLCompareConfig": {
+      "type": "object",
+      "required": [
+        "threshold"
+      ],
+      "properties": {
+        "ignore_lines": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "threshold": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "ImageCompareConfig": {
+      "type": "object",
+      "required": [
+        "threshold"
+      ],
+      "properties": {
+        "threshold": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "Mode": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Ignore"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "Absolute"
+          ],
+          "properties": {
+            "Absolute": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Relative"
+          ],
+          "properties": {
+            "Relative": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Rule": {
+      "type": "object",
+      "oneOf": [
+        {
+          "description": "smart CSV compare",
+          "type": "object",
+          "required": [
+            "CSV"
+          ],
+          "properties": {
+            "CSV": {
+              "$ref": "#/definitions/CSVCompareConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "thresholds comparison",
+          "type": "object",
+          "required": [
+            "Image"
+          ],
+          "properties": {
+            "Image": {
+              "$ref": "#/definitions/ImageCompareConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "stupid text compare",
+          "type": "object",
+          "required": [
+            "PlainText"
+          ],
+          "properties": {
+            "PlainText": {
+              "$ref": "#/definitions/HTMLCompareConfig"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "required": [
+        "name",
+        "pattern_include"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "pattern_exclude": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pattern_include": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

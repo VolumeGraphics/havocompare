@@ -1,0 +1,20 @@
+rules:
+  - name: "VGRF-Reporting CSV comparing"
+    pattern_include: "**/*.csv"
+    pattern_exclude: "**/vg_report.csv"
+    CSV:
+      comparison_modes:
+        - Absolute: 1.0
+        - Relative: 0.1
+      exclude_field_regex: "Excluded"
+
+  - name: "HTML-Compare strict"
+    pattern_exclude: "**/*_changed.html"
+    pattern_include: "**/*.html"
+    PlainText:
+      threshold: 1.0
+      ignore_lines:
+        - "stylesheet"
+        - "next_ignore"
+        - "[A-Z]*[0-9]"
+
