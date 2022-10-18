@@ -23,7 +23,7 @@ use tracing::{debug, error, info};
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 enum ComparisonMode {
     /// smart CSV compare
-    CommaSeparatedValues(csv::CSVCompareConfig),
+    CSV(csv::CSVCompareConfig),
     /// thresholds comparison
     Image(image::ImageCompareConfig),
     /// plain text compare
@@ -81,7 +81,7 @@ fn process_file(
     );
 
     let compare_result = match &rule.file_type {
-        ComparisonMode::CommaSeparatedValues(conf) => {
+        ComparisonMode::CSV(conf) => {
             csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
         }
         ComparisonMode::Image(conf) => {
