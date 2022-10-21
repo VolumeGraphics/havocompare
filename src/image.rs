@@ -58,3 +58,45 @@ pub fn compare_paths<P: AsRef<Path>>(
         rule_name,
     )
 }
+
+#[cfg(test)]
+mod test {
+    use crate::image::{compare_paths, ImageCompareConfig};
+
+    #[test]
+    fn identity() {
+        let result = compare_paths(
+            "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
+            "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
+            &ImageCompareConfig { threshold: 1.0 },
+            "test-rule",
+        );
+        assert!(!result.is_error);
+    }
+
+    #[test]
+    fn pin_diff_image() {
+        let result = compare_paths(
+            "tests/integ/data/images/expected/SaveImage_100DPI_default_size.jpg",
+            "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
+            &ImageCompareConfig { threshold: 1.0 },
+            "test-rule",
+        );
+        assert!(result.is_error);
+        assert!(result.detail_path.is_some());
+        let img = image::open(
+            result
+                .detail_path
+                .unwrap()
+                .join("SaveImage_100DPI_default_size.jpgdiff_image.png"),
+        )
+        .expect("Could not load generated diff image")
+        .into_rgb8();
+        let nom = image::open("tests/integ/data/images/diff_100_DPI.png")
+            .unwrap()
+            .into_rgb8();
+        let diff_result = image_compare::rgb_hybrid_compare(&img, &nom)
+            .expect("Wrong dimensions of diff images!");
+        assert_eq!(diff_result.score, 1.0);
+    }
+}
