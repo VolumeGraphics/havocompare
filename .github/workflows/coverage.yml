@@ -12,7 +12,7 @@ jobs:
     - name: Install latest nightly
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: nightly
         override: true
         components: rustfmt, clippy, llvm-tools-preview
     
@@ -32,8 +32,8 @@ jobs:
          RUSTFLAGS: "-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
          CARGO_INCREMENTAL: 0
       run: |
-         cargo build --verbose
-         cargo test --verbose
+         cargo +nightly build --verbose
+         cargo +nightly test --verbose
          grcov . -s . --binary-path ./target/debug/ -t lcov --llvm --branch --ignore-not-existing --ignore="/*" --ignore="target/*" --ignore="tests/*"  -o lcov.info
          
     - name: Push grcov results to Coveralls via GitHub Action
