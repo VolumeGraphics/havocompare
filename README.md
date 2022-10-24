@@ -1,7 +1,9 @@
 # Havocompare - a folder comparison utility
+[![Crates.io](https://img.shields.io/crates/d/havocompare?style=flat)](https://crates.io/crates/havocompare)
 [![Documentation](https://docs.rs/havocompare/badge.svg)](https://docs.rs/havocompare)
 ![CI](https://github.com/VolumeGraphics/havocompare/actions/workflows/rust.yml/badge.svg?branch=main "CI")
 [![Coverage Status](https://coveralls.io/repos/github/VolumeGraphics/havocompare/badge.svg?branch=main)](https://coveralls.io/github/VolumeGraphics/havocompare?branch=main)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE-MIT)
 
 ## Quickstart
 
