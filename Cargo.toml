@@ -8,7 +8,7 @@ version = "0.1.1"
 edition = "2021"
 license = "MIT"
 authors = ["Volume Graphics GmbH"]
-exclude = ["tests/integ", "tests/html", "tests/csv", ".github", "test_report"]
+exclude = ["tests/integ", "tests/html", "target", "tests/csv", ".github", "test_report"]
 
 [dependencies]
 clap = {version= "4.0", features=["derive"]}
