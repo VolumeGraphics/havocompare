@@ -99,3 +99,12 @@ crate is used. You can ignore single lines which you know are different by speci
         - "next_ignore"
         - "[A-Z]*[0-9]"
 ```
+
+
+## Changelog
+
+### 0.1.1:
+ - Better error message on folder not found
+ - Better test coverage
+ - Fix colors on windows terminal
+ - Extend CI to windows and mac
