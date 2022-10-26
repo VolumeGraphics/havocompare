@@ -194,3 +194,21 @@ pub fn get_schema() -> String {
     let schema = schema_for!(ConfigurationFile);
     serde_json::to_string_pretty(&schema).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::image::ImageCompareConfig;
+    #[test]
+    fn folder_not_found_is_false() {
+        let rule = Rule {
+            name: "test rule".to_string(),
+            file_type: ComparisonMode::Image(ImageCompareConfig { threshold: 1.0 }),
+            pattern_include: "*.".to_string(),
+            pattern_exclude: None,
+        };
+        let mut result = Vec::new();
+        assert!(!process_rule("NOT_EXISTING", ".", &rule, &mut result));
+        assert!(!process_rule(".", "NOT_EXISTING", &rule, &mut result));
+    }
+}

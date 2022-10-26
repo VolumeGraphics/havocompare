@@ -7,7 +7,7 @@ use tracing::{error, info};
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug)]
 pub struct ImageCompareConfig {
-    threshold: f64,
+    pub(crate) threshold: f64,
 }
 
 pub fn compare_paths<P: AsRef<Path>>(
