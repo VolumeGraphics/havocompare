@@ -479,8 +479,72 @@ fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Delimiters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use test_log::test;
+    use crate::csv::DiffType::{DifferentValueTypes, OutOfTolerance, UnequalStrings};
+
+    const NOMINAL: &str = "nominal";
+    const ACTUAL: &str = "actual";
+    const POS_COL: usize = 1337;
+    const POS_ROW: usize = 667;
+
+    fn mk_position() -> Position {
+        Position {
+            col: POS_COL,
+            row: POS_ROW,
+        }
+    }
+
+    #[test]
+    fn diff_types_readable_string() {
+        let string_unequal = UnequalStrings {
+            nominal: NOMINAL.to_string(),
+            actual: ACTUAL.to_string(),
+            position: mk_position(),
+        };
+        let msg = format!("{}", string_unequal);
+        assert!(msg.contains(NOMINAL));
+        assert!(msg.contains(ACTUAL));
+        assert!(msg.contains(format!("{}", POS_COL).as_str()));
+        assert!(msg.contains(format!("{}", POS_ROW).as_str()));
+    }
+
+    #[test]
+    fn diff_types_readable_out_of_tolerance() {
+        let string_unequal = OutOfTolerance {
+            nominal: Quantity {
+                value: 10.0,
+                unit: Some("mm".to_owned()),
+            },
+            actual: Quantity {
+                value: 12.0,
+                unit: Some("um".to_owned()),
+            },
+            mode: Mode::Absolute(11.0),
+            position: mk_position(),
+        };
+        let msg = format!("{}", string_unequal);
+        println!("{}", msg);
+        assert!(msg.contains("10 mm"));
+        assert!(msg.contains("11"));
+        assert!(msg.contains("12 um"));
+        assert!(msg.contains("Absolute"));
+        assert!(msg.contains(format!("{}", POS_COL).as_str()));
+        assert!(msg.contains(format!("{}", POS_ROW).as_str()));
+    }
+
+    #[test]
+    fn diff_types_readable_different_value_types() {
+        let string_unequal = DifferentValueTypes {
+            nominal: Value::from_str("10.0 mm", &None),
+            actual: Value::from_str(ACTUAL, &None),
+            position: mk_position(),
+        };
+        let msg = format!("{}", string_unequal);
+        println!("{}", msg);
+        assert!(msg.contains("10 mm"));
+        assert!(msg.contains(ACTUAL));
+        assert!(msg.contains(format!("{}", POS_COL).as_str()));
+        assert!(msg.contains(format!("{}", POS_ROW).as_str()));
+    }
 
     #[test]
     fn identity_comparison_is_empty() {
@@ -514,7 +578,7 @@ mod tests {
         let diff = get_diffs_readers(nominal, actual, &config);
         assert_eq!(diff.len(), 1);
         let first_diff = diff.first().unwrap();
-        if let DiffType::DifferentValueTypes {
+        if let DifferentValueTypes {
             nominal,
             actual,
             position,
@@ -526,6 +590,7 @@ mod tests {
             assert_eq!(position.row, 12);
         }
     }
+
     #[test]
     fn numerics_test_absolute() {
         let config = CSVCompareConfig {
@@ -543,6 +608,23 @@ mod tests {
         let diff = get_diffs_readers(nominal, actual, &config);
         // the different value type is still there, but we have 2 diffs over 0.5
         assert_eq!(diff.len(), 3);
+    }
+
+    #[test]
+    fn mode_formatting() {
+        let abs = Mode::Absolute(0.1);
+        let msg = format!("{}", abs);
+        assert!(msg.contains("0.1"));
+        assert!(msg.contains("Absolute"));
+
+        let abs = Mode::Relative(0.1);
+        let msg = format!("{}", abs);
+        assert!(msg.contains("0.1"));
+        assert!(msg.contains("Relative"));
+
+        let abs = Mode::Ignore;
+        let msg = format!("{}", abs);
+        assert!(msg.contains("Ignored"));
     }
 
     #[test]
