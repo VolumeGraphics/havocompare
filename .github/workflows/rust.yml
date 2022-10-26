@@ -1,5 +1,3 @@
-name: Rust-CI
-
 on:
   push:
     branches: [ "main" ]
@@ -11,7 +9,6 @@ env:
 
 jobs:
   build:
-    name: rust-ci ${{ matrix.target }}
     strategy:
       fail-fast: true
       matrix:
@@ -20,6 +17,7 @@ jobs:
         - os: windows-latest
         - os: macos-latest
 
+    name: rust-ci ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
