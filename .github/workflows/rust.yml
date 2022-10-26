@@ -1,4 +1,4 @@
-name: Rust
+name: Rust-CI
 
 on:
   push:
@@ -11,9 +11,16 @@ env:
 
 jobs:
   build:
+    name: rust-ci ${{ matrix.target }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - os: ubuntu-latest
+        - os: windows-latest
+        - os: macos-latest
 
-    runs-on: ubuntu-latest
-
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
     - name: Build
