@@ -13,6 +13,7 @@ mod image;
 mod report;
 
 use crate::html::HTMLCompareConfig;
+use crate::report::FileCompareResult;
 use schemars::schema_for;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -74,7 +75,7 @@ fn process_file(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-) -> report::FileCompareResult {
+) -> FileCompareResult {
     info!(
         "Processing files: {} vs {}...",
         nominal.as_ref().to_string_lossy(),
@@ -106,9 +107,24 @@ fn process_rule(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-    compare_results: &mut Vec<report::FileCompareResult>,
+    compare_results: &mut Vec<FileCompareResult>,
 ) -> bool {
     info!("Processing rule: {}", rule.name.as_str());
+    if !nominal.as_ref().is_dir() {
+        error!(
+            "Nominal folder {} is not a folder",
+            nominal.as_ref().to_string_lossy()
+        );
+        return false;
+    }
+    if !actual.as_ref().is_dir() {
+        error!(
+            "Actual folder {} is not a folder",
+            actual.as_ref().to_string_lossy()
+        );
+        return false;
+    }
+
     let nominal_files_exclude = glob_files(nominal.as_ref(), rule.pattern_exclude.as_deref());
     let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), Some(rule.pattern_include.as_str()));
     let nominal_cleaned_paths = filter_exclude(nominal_paths, nominal_files_exclude);
@@ -152,7 +168,7 @@ pub fn compare_folders(
     let mut rule_results: Vec<report::RuleResult> = Vec::new();
 
     config.rules.into_iter().for_each(|rule| {
-        let mut compare_results: Vec<report::FileCompareResult> = Vec::new();
+        let mut compare_results: Vec<FileCompareResult> = Vec::new();
         let okay = process_rule(
             nominal.as_ref(),
             actual.as_ref(),
@@ -177,4 +193,22 @@ pub fn compare_folders(
 pub fn get_schema() -> String {
     let schema = schema_for!(ConfigurationFile);
     serde_json::to_string_pretty(&schema).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::image::ImageCompareConfig;
+    #[test]
+    fn folder_not_found_is_false() {
+        let rule = Rule {
+            name: "test rule".to_string(),
+            file_type: ComparisonMode::Image(ImageCompareConfig { threshold: 1.0 }),
+            pattern_include: "*.".to_string(),
+            pattern_exclude: None,
+        };
+        let mut result = Vec::new();
+        assert!(!process_rule("NOT_EXISTING", ".", &rule, &mut result));
+        assert!(!process_rule(".", "NOT_EXISTING", &rule, &mut result));
+    }
 }
