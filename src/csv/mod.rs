@@ -854,4 +854,36 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn nan_is_nan() {
+        let nan = f32::NAN;
+        let nominal = Quantity {
+            value: nan,
+            unit: None,
+        };
+        let actual = Quantity {
+            value: nan,
+            unit: None,
+        };
+
+        assert!(Mode::Relative(1.0).in_tolerance(&nominal, &actual));
+        assert!(Mode::Absolute(1.0).in_tolerance(&nominal, &actual));
+        assert!(Mode::Ignore.in_tolerance(&nominal, &actual))
+    }
+
+    #[test]
+    fn no_delimiter_whole_row_is_field() {
+        let row = "my - cool - row - has - strange - delimiters";
+        let delimiters = Delimiters {
+            field_delimiter: None,
+            decimal_separator: None,
+        };
+        let split_result = split_row(row.to_string(), &delimiters, POS_ROW);
+        assert_eq!(split_result.len(), 1);
+        let field = split_result.first().unwrap();
+        assert_eq!(field.value.get_string().as_deref().unwrap(), row);
+        assert_eq!(field.position.row, POS_ROW);
+        assert_eq!(field.position.col, 0);
+    }
 }
