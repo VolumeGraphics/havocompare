@@ -1,5 +1,3 @@
-name: Rust-CI Linux
-
 on:
   push:
     branches: [ "main" ]
@@ -11,9 +9,16 @@ env:
 
 jobs:
   build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        - os: ubuntu-latest
+        - os: windows-latest
+        - os: macos-latest
 
-    runs-on: ubuntu-latest
-
+    name: rust-ci ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
     - name: Build
