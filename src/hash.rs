@@ -30,13 +30,13 @@ impl HashFunction {
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct HashConfig {
-    hash: HashFunction,
+    function: HashFunction,
 }
 
 impl Default for HashConfig {
     fn default() -> Self {
         HashConfig {
-            hash: HashFunction::Sha256,
+            function: HashFunction::Sha256,
         }
     }
 }
@@ -47,10 +47,10 @@ pub fn compare_files<P: AsRef<Path>>(
     config: &HashConfig,
     rule_name: &str,
 ) -> report::FileCompareResult {
-    let act = config.hash.hash_file(
+    let act = config.function.hash_file(
         File::open(actual_path.as_ref()).expect("Could not open actual file for hashing"),
     );
-    let nom = config.hash.hash_file(
+    let nom = config.function.hash_file(
         File::open(nominal_path.as_ref()).expect("Could not open actual file for hashing"),
     );
 

@@ -74,10 +74,10 @@
     "HashConfig": {
       "type": "object",
       "required": [
-        "hash"
+        "function"
       ],
       "properties": {
-        "hash": {
+        "function": {
           "$ref": "#/definitions/HashFunction"
         }
       }
