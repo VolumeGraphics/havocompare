@@ -30,6 +30,8 @@ itertools = "0.10"
 tera = "1.17"
 md5 = "0.7.0"
 tempdir = "0.3"
+sha2 = "0.10.6"
+data-encoding = "2.3.2"
 
 [target.'cfg(windows)'.dependencies]
 ansi_term = "0.12"

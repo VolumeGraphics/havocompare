@@ -8,10 +8,12 @@
 #![deny(deprecated)]
 
 mod csv;
+mod hash;
 mod html;
 mod image;
 mod report;
 
+use crate::hash::HashConfig;
 use crate::html::HTMLCompareConfig;
 use crate::report::FileCompareResult;
 use schemars::schema_for;
@@ -30,6 +32,8 @@ enum ComparisonMode {
     Image(image::ImageCompareConfig),
     /// plain text compare
     PlainText(HTMLCompareConfig),
+    /// Compare using file hashes
+    Hash(HashConfig),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -91,6 +95,9 @@ fn process_file(
         }
         ComparisonMode::PlainText(conf) => {
             html::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+        }
+        ComparisonMode::Hash(conf) => {
+            hash::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
         }
     };
 
