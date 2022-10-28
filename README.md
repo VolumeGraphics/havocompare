@@ -103,7 +103,23 @@ crate is used. You can ignore single lines which you know are different by speci
 ```
 
 
+#### Hash comparison
+For binary files which cannot otherwise be checked we can also do a simple hash comparison.
+Currently we only support SHA-256 but more checks can be added easily.
+
+```yaml
+  - name: "Hash comparison strict"
+    pattern_exclude: "**/*.bin"
+    Hash:
+      function: Sha256
+```
+
+
 ## Changelog
+
+### 0.1.2:
+- Add SHA-256 comparison mode
+- Fix BOM on windows for CSV comparison
 
 ### 0.1.1:
  - Better error message on folder not found

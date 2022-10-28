@@ -248,7 +248,7 @@ pub struct Field {
     pub value: Value,
 }
 
-fn split_row(row: String, config: &Delimiters, row_num: usize) -> Vec<Field> {
+fn split_row(row: &str, config: &Delimiters, row_num: usize) -> Vec<Field> {
     if let Some(row_delimiter) = config.field_delimiter.as_ref() {
         row.split(*row_delimiter)
             .enumerate()
@@ -266,7 +266,7 @@ fn split_row(row: String, config: &Delimiters, row_num: usize) -> Vec<Field> {
                 row: row_num,
                 col: 0,
             },
-            value: Value::from_str(row.as_str(), &config.decimal_separator),
+            value: Value::from_str(row, &config.decimal_separator),
         };
         vec![field]
     }
@@ -283,7 +283,13 @@ pub fn split_to_fields<R: Read + Seek>(mut input: R, config: &Delimiters) -> Vec
         .lines()
         .filter_map(|l| l.ok())
         .enumerate()
-        .flat_map(|(row_num, row_value)| split_row(row_value, &delimiters, row_num))
+        .flat_map(|(row_num, row_value)| {
+            split_row(
+                row_value.trim_start_matches('\u{feff}'),
+                &delimiters,
+                row_num,
+            )
+        })
         .collect()
 }
 
@@ -480,6 +486,7 @@ fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Delimiters {
 mod tests {
     use super::*;
     use crate::csv::DiffType::{DifferentValueTypes, OutOfTolerance, UnequalStrings};
+    use std::io::Cursor;
 
     const NOMINAL: &str = "nominal";
     const ACTUAL: &str = "actual";
@@ -879,11 +886,24 @@ mod tests {
             field_delimiter: None,
             decimal_separator: None,
         };
-        let split_result = split_row(row.to_string(), &delimiters, POS_ROW);
+        let split_result = split_row(row, &delimiters, POS_ROW);
         assert_eq!(split_result.len(), 1);
         let field = split_result.first().unwrap();
         assert_eq!(field.value.get_string().as_deref().unwrap(), row);
         assert_eq!(field.position.row, POS_ROW);
         assert_eq!(field.position.col, 0);
+    }
+
+    #[test]
+    fn bom_is_trimmed() {
+        let str_with_bom = "\u{feff}Hallo\n\r";
+        let str_no_bom = "Hallo\n";
+        let cfg = CSVCompareConfig {
+            delimiters: Delimiters::default(),
+            exclude_field_regex: None,
+            comparison_modes: vec![Mode::Absolute(0.0)],
+        };
+        let res = get_diffs_readers(Cursor::new(str_with_bom), Cursor::new(str_no_bom), &cfg);
+        assert!(res.is_empty());
     }
 }
