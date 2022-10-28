@@ -94,7 +94,7 @@ mod test {
     }
 
     #[test]
-    fn different_files_throw() {
+    fn different_files_throw_outer() {
         let file_act = "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg";
         let file_nominal = "tests/integ/data/images/expected/SaveImage_100DPI_default_size.jpg";
 
