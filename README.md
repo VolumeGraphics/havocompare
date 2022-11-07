@@ -117,6 +117,9 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ## Changelog
 
+### 0.1.3:
+- Add optional cli argument to configure the folder to store the report
+
 ### 0.1.2:
 - Add SHA-256 comparison mode
 - Fix BOM on windows for CSV comparison
