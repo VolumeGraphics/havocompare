@@ -15,7 +15,7 @@ enum Commands {
         actual: String,
         /// Path to compare config YAML
         compare_config: String,    
-        /// Optional Path to report file
+        /// Optional: Folder to store the report to, if not set the default location will be chosen.
         #[arg(short, long = "report_path", default_value_t = DEFAULT_REPORT_FOLDER.to_string())]
         report_config: String,
     },
