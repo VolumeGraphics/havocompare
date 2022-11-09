@@ -14,7 +14,10 @@ enum Commands {
         /// Actual data folder
         actual: String,
         /// Path to compare config YAML
-        compare_config: String,
+        compare_config: String,    
+        /// Optional: Folder to store the report to, if not set the default location will be chosen.
+        #[arg(short, long = "report_path", default_value_t = DEFAULT_REPORT_FOLDER.to_string())]
+        report_config: String,
     },
 
     /// Export the JsonSchema for the config files
@@ -53,16 +56,17 @@ fn main() {
             println!("{}", get_schema());
             std::process::exit(0);
         }
-        Commands::Compare {
+        Commands::Compare {            
             compare_config,
             nominal,
             actual,
+            report_config
         } => {
             let result = havocompare::compare_folders(
                 nominal,
                 actual,
                 compare_config,
-                DEFAULT_REPORT_FOLDER,
+                report_config,
             );
             if result {
                 std::process::exit(0);
