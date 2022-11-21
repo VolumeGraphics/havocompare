@@ -1,6 +1,6 @@
 mod template;
 
-use crate::csv::{split_to_fields, Delimiters, DiffType};
+use crate::csv::{Delimiters, DiffType, Table};
 use serde::Serialize;
 use std::fs;
 use std::fs::File;
@@ -121,8 +121,8 @@ pub fn write_csv_detail(
     //convert this somehow to html
     let nominal_file = File::open(nominal.as_ref()).expect("Could not open nominal file");
     let actual_file = File::open(actual.as_ref()).expect("Could not open nominal file");
-    let nominal_fields = split_to_fields(nominal_file, delimiter);
-    let actual_fields = split_to_fields(actual_file, delimiter);
+    let nominal_fields = Table::from_reader(nominal_file, delimiter);
+    let actual_fields = Table::from_reader(actual_file, delimiter);
 
     let mut rows: Vec<Vec<CSVReport>> = Vec::new();
     let mut headers: Vec<CSVReport> = Vec::new();

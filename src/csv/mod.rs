@@ -1,4 +1,11 @@
 use crate::report;
+mod preprocessing;
+mod value;
+
+use preprocessing::Preprocessor;
+use value::Quantity;
+use value::Value;
+
 use itertools::Itertools;
 use regex::Regex;
 use schemars_derive::JsonSchema;
@@ -139,6 +146,7 @@ pub struct CSVCompareConfig {
     pub delimiters: Delimiters,
     pub comparison_modes: Vec<Mode>,
     pub exclude_field_regex: Option<String>,
+    pub preprocessing: Option<Vec<Preprocessor>>,
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
@@ -153,144 +161,76 @@ impl Delimiters {
     }
 }
 
-#[derive(Debug, Clone, JsonSchema, Deserialize, Serialize, PartialEq)]
-pub struct Quantity {
-    value: f32,
-    unit: Option<String>,
+pub struct Column {
+    header: Option<String>,
+    rows: Vec<Value>,
 }
 
-impl Quantity {
-    #[cfg(test)]
-    pub(crate) fn new(value: f32, unit: Option<&str>) -> Self {
-        Self {
-            unit: unit.map(|s| s.to_owned()),
-            value,
+impl Default for Column {
+    fn default() -> Self {
+        Column {
+            rows: Vec::new(),
+            header: None,
         }
     }
 }
 
-impl Display for Quantity {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(unit) = self.unit.as_deref() {
-            write!(f, "{} {}", self.value, unit)
-        } else {
-            write!(f, "{}", self.value)
-        }
-    }
+pub struct Table {
+    columns: Vec<Column>,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Value {
-    Quantity(Quantity),
-    String(String),
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Value::Quantity(val) => {
-                write!(f, "{}", val).unwrap();
-            }
-            Value::String(val) => {
-                write!(f, "'{}'s", val).unwrap();
-            }
-        }
-        Ok(())
-    }
-}
-
-impl Value {
-    fn get_numerical_value(field_split: &[&str]) -> Option<f32> {
-        if field_split.len() == 1 || field_split.len() == 2 {
-            if let Ok(float_value) = field_split.first().unwrap().parse::<f32>() {
-                return Some(float_value);
-            }
-        }
-        None
-    }
-
-    pub fn from_str(s: &str, decimal_separator: &Option<char>) -> Value {
-        let field_string: String = if let Some(delim) = decimal_separator {
-            s.replace(*delim, ".")
-        } else {
-            s.into()
+impl Table {
+    pub fn from_reader<R: Read + Seek>(mut input: R, config: &Delimiters) -> Table {
+        let delimiters = match config.is_empty() {
+            false => Cow::Borrowed(config),
+            true => Cow::Owned(guess_format_from_reader(&mut input)),
         };
+        debug!("Final delimiters: {:?}", delimiters);
+        let mut cols = Vec::new();
+        let input = BufReader::new(input);
+        input.lines().filter_map(|l| l.ok()).for_each(|row| {
+            let fields = split_row(row.as_str(), config);
+            if cols.is_empty() {
+                cols.resize_with(fields.len(), Column::default);
+            }
+            fields
+                .into_iter()
+                .zip(cols.iter_mut())
+                .for_each(|(f, col)| col.rows.push(f));
+        });
 
-        let field_split: Vec<_> = field_string.trim().split(' ').collect();
-
-        if let Some(float_value) = Self::get_numerical_value(field_split.as_slice()) {
-            Value::Quantity(Quantity {
-                value: float_value,
-                unit: field_split.get(1).map(|&s| s.to_owned()),
-            })
-        } else {
-            Value::String(s.to_owned())
-        }
-    }
-
-    pub fn get_quantity(&self) -> Option<&Quantity> {
-        match self {
-            Value::Quantity(quantity) => Some(quantity),
-            _ => None,
-        }
-    }
-
-    pub fn get_string(&self) -> Option<String> {
-        match self {
-            Value::String(string) => Some(string.to_owned()),
-            _ => None,
-        }
+        Table { columns: cols }
     }
 }
-
-pub struct Field {
-    pub position: Position,
-    pub value: Value,
+pub fn compare_tables(nominal: Table, actual: Table, config: &CSVCompareConfig) -> Vec<DiffType> {
+    nominal
+        .columns
+        .into_iter()
+        .zip(actual.columns.into_iter())
+        .enumerate()
+        .flat_map(|(col, (col_nom, col_act))| {
+            col_nom
+                .rows
+                .into_iter()
+                .zip(col_act.rows.into_iter())
+                .enumerate()
+                .flat_map(|(row, (val_nom, val_act))| {
+                    let position = Position { row, col };
+                    compare_values(val_nom, val_act, config, position)
+                })
+        })
+        .collect()
 }
 
-fn split_row(row: &str, config: &Delimiters, row_num: usize) -> Vec<Field> {
+fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
     if let Some(row_delimiter) = config.field_delimiter.as_ref() {
         row.split(*row_delimiter)
             .enumerate()
-            .map(|(column, field)| Field {
-                position: Position {
-                    row: row_num,
-                    col: column,
-                },
-                value: Value::from_str(field, &config.decimal_separator),
-            })
+            .map(|(column, field)| Value::from_str(field, &config.decimal_separator))
             .collect()
     } else {
-        let field = Field {
-            position: Position {
-                row: row_num,
-                col: 0,
-            },
-            value: Value::from_str(row, &config.decimal_separator),
-        };
-        vec![field]
+        vec![Value::from_str(row, &config.decimal_separator)]
     }
-}
-
-pub fn split_to_fields<R: Read + Seek>(mut input: R, config: &Delimiters) -> Vec<Field> {
-    let delimiters = match config.is_empty() {
-        false => Cow::Borrowed(config),
-        true => Cow::Owned(guess_format_from_reader(&mut input)),
-    };
-    debug!("Final delimiters: {:?}", delimiters);
-    let input = BufReader::new(input);
-    input
-        .lines()
-        .filter_map(|l| l.ok())
-        .enumerate()
-        .flat_map(|(row_num, row_value)| {
-            split_row(
-                row_value.trim_start_matches('\u{feff}'),
-                &delimiters,
-                row_num,
-            )
-        })
-        .collect()
 }
 
 fn both_quantity<'a>(
@@ -314,9 +254,14 @@ fn both_string(actual: &Value, nominal: &Value) -> Option<(String, String)> {
     None
 }
 
-fn compare_fields(nominal: Field, actual: Field, config: &CSVCompareConfig) -> Vec<DiffType> {
+fn compare_values(
+    nominal: Value,
+    actual: Value,
+    config: &CSVCompareConfig,
+    position: Position,
+) -> Vec<DiffType> {
     // float quantity compare
-    if let Some((actual_float, nominal_float)) = both_quantity(&actual.value, &nominal.value) {
+    if let Some((actual_float, nominal_float)) = both_quantity(&actual, &actual) {
         config
             .comparison_modes
             .iter()
@@ -326,15 +271,14 @@ fn compare_fields(nominal: Field, actual: Field, config: &CSVCompareConfig) -> V
                         nominal: nominal_float.clone(),
                         actual: actual_float.clone(),
                         mode: *cm,
-                        position: nominal.position,
+                        position,
                     })
                 } else {
                     None
                 }
             })
             .collect()
-    } else if let Some((actual_string, nominal_string)) = both_string(&actual.value, &nominal.value)
-    {
+    } else if let Some((actual_string, nominal_string)) = both_string(&actual, &nominal) {
         if let Some(exclude_regex) = config.exclude_field_regex.as_deref() {
             let regex = Regex::new(exclude_regex).expect("Specified exclusion regex invalid!");
             if regex.is_match(nominal_string.as_str()) {
@@ -343,7 +287,7 @@ fn compare_fields(nominal: Field, actual: Field, config: &CSVCompareConfig) -> V
         }
         if nominal_string != actual_string {
             vec![DiffType::UnequalStrings {
-                position: nominal.position,
+                position,
                 nominal: nominal_string,
                 actual: actual_string,
             }]
@@ -352,9 +296,9 @@ fn compare_fields(nominal: Field, actual: Field, config: &CSVCompareConfig) -> V
         }
     } else {
         vec![DiffType::DifferentValueTypes {
-            actual: actual.value,
-            nominal: nominal.value,
-            position: nominal.position,
+            actual,
+            nominal,
+            position,
         }]
     }
 }
@@ -364,13 +308,16 @@ fn get_diffs_readers<R: Read + Seek>(
     actual: R,
     config: &CSVCompareConfig,
 ) -> Vec<DiffType> {
-    let nominal_fields = split_to_fields(nominal, &config.delimiters);
-    let actual_fields = split_to_fields(actual, &config.delimiters);
-    nominal_fields
-        .into_iter()
-        .zip(actual_fields.into_iter())
-        .flat_map(|(nominal, actual)| compare_fields(nominal, actual, config))
-        .collect()
+    let mut nominal = Table::from_reader(nominal, &config.delimiters);
+    let mut actual = Table::from_reader(actual, &config.delimiters);
+    info!("Running preprocessing steps");
+    if let Some(preprocessors) = config.preprocessing.as_ref() {
+        preprocessors.iter().for_each(|preprocessor| {
+            preprocessor.process(&mut nominal);
+            preprocessor.process(&mut actual);
+        });
+    }
+    compare_tables(nominal, actual, config)
 }
 
 pub fn compare_paths(
@@ -559,6 +506,7 @@ mod tests {
             exclude_field_regex: None,
             comparison_modes: vec![Mode::Absolute(0.0), Mode::Relative(0.0)],
             delimiters: Delimiters::default(),
+            preprocessing: None,
         };
 
         let actual = File::open("tests/csv/data/Annotations.csv").unwrap();
@@ -571,6 +519,7 @@ mod tests {
     #[test]
     fn different_type_search_only() {
         let config = CSVCompareConfig {
+            preprocessing: None,
             exclude_field_regex: Some(r"Surface".to_owned()),
             comparison_modes: vec![],
             delimiters: Delimiters {
@@ -601,6 +550,7 @@ mod tests {
     #[test]
     fn numerics_test_absolute() {
         let config = CSVCompareConfig {
+            preprocessing: None,
             exclude_field_regex: Some(r"Surface".to_owned()),
             comparison_modes: vec![Mode::Absolute(0.5)],
             delimiters: Delimiters {
@@ -637,6 +587,7 @@ mod tests {
     #[test]
     fn different_formattings() {
         let config = CSVCompareConfig {
+            preprocessing: None,
             exclude_field_regex: None,
             comparison_modes: vec![Mode::Absolute(0.5)],
             delimiters: Delimiters::default(),
@@ -659,6 +610,7 @@ mod tests {
     #[test]
     fn numerics_test_relative() {
         let config = CSVCompareConfig {
+            preprocessing: None,
             exclude_field_regex: Some(r"Surface".to_owned()),
             comparison_modes: vec![Mode::Relative(0.1)],
             delimiters: Delimiters {
@@ -886,12 +838,10 @@ mod tests {
             field_delimiter: None,
             decimal_separator: None,
         };
-        let split_result = split_row(row, &delimiters, POS_ROW);
+        let split_result = split_row(row, &delimiters);
         assert_eq!(split_result.len(), 1);
-        let field = split_result.first().unwrap();
-        assert_eq!(field.value.get_string().as_deref().unwrap(), row);
-        assert_eq!(field.position.row, POS_ROW);
-        assert_eq!(field.position.col, 0);
+        let value = split_result.first().unwrap();
+        assert_eq!(value.get_string().as_deref().unwrap(), row);
     }
 
     #[test]
@@ -899,6 +849,7 @@ mod tests {
         let str_with_bom = "\u{feff}Hallo\n\r";
         let str_no_bom = "Hallo\n";
         let cfg = CSVCompareConfig {
+            preprocessing: None,
             delimiters: Delimiters::default(),
             exclude_field_regex: None,
             comparison_modes: vec![Mode::Absolute(0.0)],
