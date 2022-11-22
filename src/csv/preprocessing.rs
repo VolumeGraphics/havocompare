@@ -11,6 +11,7 @@ pub enum Preprocessor {
     DeleteColumnByNumber(usize),
     DeleteColumnByName(String),
     SortByColumnName(String),
+    SortByColumnNumber(usize),
 }
 
 impl Preprocessor {
@@ -20,8 +21,31 @@ impl Preprocessor {
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
             Preprocessor::DeleteColumnByName(name) => delete_column_name(table, name.as_str()),
             Preprocessor::SortByColumnName(name) => sort_by_column_name(table, name.as_str()),
+            Preprocessor::SortByColumnNumber(id) => sort_by_column_id(table, *id),
         }
     }
+}
+
+fn get_permutation(rows_to_sort_by: &Vec<Value>) -> permutation::Permutation {
+    permutation::sort_by(rows_to_sort_by, |a, b| {
+        b.get_quantity()
+            .unwrap()
+            .value
+            .partial_cmp(&a.get_quantity().unwrap().value)
+            .unwrap_or(Equal)
+    })
+}
+
+fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutation) {
+    table.columns.iter_mut().for_each(|c| {
+        permutation.apply_slice_in_place(&mut c.rows);
+    });
+}
+
+fn sort_by_column_id(table: &mut Table, id: usize) {
+    let sort_master_col = table.columns.get(id).unwrap();
+    let permutation = get_permutation(&sort_master_col.rows);
+    apply_permutation(table, permutation);
 }
 
 fn sort_by_column_name(table: &mut Table, name: &str) {
@@ -30,16 +54,8 @@ fn sort_by_column_name(table: &mut Table, name: &str) {
         .iter()
         .find(|c| c.header.as_deref().unwrap_or_default() == name)
         .unwrap();
-    let mut permutation = permutation::sort_by(&sort_master_col.rows, |a, b| {
-        b.get_quantity()
-            .unwrap()
-            .value
-            .partial_cmp(&a.get_quantity().unwrap().value)
-            .unwrap_or(Equal)
-    });
-    table.columns.iter_mut().for_each(|c| {
-        permutation.apply_slice_in_place(&mut c.rows);
-    });
+    let permutation = get_permutation(&sort_master_col.rows);
+    apply_permutation(table, permutation);
 }
 
 fn delete_column_name(table: &mut Table, name: &str) {
