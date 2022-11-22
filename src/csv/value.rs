@@ -28,7 +28,7 @@ impl Display for Quantity {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Quantity(Quantity),
     String(String),

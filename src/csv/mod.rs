@@ -149,34 +149,43 @@ pub struct CSVCompareConfig {
     pub preprocessing: Option<Vec<Preprocessor>>,
 }
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Delimiters {
     pub field_delimiter: Option<char>,
     pub decimal_separator: Option<char>,
+}
+
+impl Default for Delimiters {
+    fn default() -> Self {
+        Delimiters {
+            field_delimiter: Some(','),
+            decimal_separator: Some('.'),
+        }
+    }
 }
 
 impl Delimiters {
     pub fn is_empty(&self) -> bool {
         self.decimal_separator.is_none() && self.field_delimiter.is_none()
     }
-}
 
-pub struct Column {
-    header: Option<String>,
-    rows: Vec<Value>,
-}
-
-impl Default for Column {
-    fn default() -> Self {
-        Column {
-            rows: Vec::new(),
-            header: None,
+    #[cfg(test)]
+    pub fn autodetect() -> Delimiters {
+        Delimiters {
+            field_delimiter: None,
+            decimal_separator: None,
         }
     }
 }
 
+#[derive(Default)]
+pub struct Column {
+    pub header: Option<String>,
+    pub rows: Vec<Value>,
+}
+
 pub struct Table {
-    columns: Vec<Column>,
+    pub columns: Vec<Column>,
 }
 
 impl Table {
@@ -189,7 +198,8 @@ impl Table {
         let mut cols = Vec::new();
         let input = BufReader::new(input);
         input.lines().filter_map(|l| l.ok()).for_each(|row| {
-            let fields = split_row(row.as_str(), config);
+            let row = row.trim_start_matches('\u{feff}');
+            let fields = split_row(row, &delimiters);
             if cols.is_empty() {
                 cols.resize_with(fields.len(), Column::default);
             }
@@ -201,20 +211,61 @@ impl Table {
 
         Table { columns: cols }
     }
+
+    pub fn rows(&self) -> RowIterator {
+        RowIterator {
+            table: self,
+            current_idx: 0,
+        }
+    }
 }
-pub fn compare_tables(nominal: Table, actual: Table, config: &CSVCompareConfig) -> Vec<DiffType> {
+
+pub struct RowIterator<'a> {
+    current_idx: usize,
+    table: &'a Table,
+}
+
+impl<'a> ExactSizeIterator for RowIterator<'a> {
+    fn len(&self) -> usize {
+        self.table
+            .columns
+            .first()
+            .map(|c| c.rows.len())
+            .unwrap_or(0)
+    }
+}
+
+impl<'a> Iterator for RowIterator<'a> {
+    type Item = Vec<&'a Value>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let row: Vec<_> = self
+            .table
+            .columns
+            .iter()
+            .filter_map(|c| c.rows.get(self.current_idx))
+            .collect();
+        self.current_idx += 1;
+        if row.len() == self.table.columns.len() {
+            Some(row)
+        } else {
+            None
+        }
+    }
+}
+
+pub fn compare_tables(nominal: &Table, actual: &Table, config: &CSVCompareConfig) -> Vec<DiffType> {
     nominal
         .columns
-        .into_iter()
-        .zip(actual.columns.into_iter())
+        .iter()
+        .zip(actual.columns.iter())
         .enumerate()
         .flat_map(|(col, (col_nom, col_act))| {
             col_nom
                 .rows
-                .into_iter()
-                .zip(col_act.rows.into_iter())
+                .iter()
+                .zip(col_act.rows.iter())
                 .enumerate()
-                .flat_map(|(row, (val_nom, val_act))| {
+                .flat_map(move |(row, (val_nom, val_act))| {
                     let position = Position { row, col };
                     compare_values(val_nom, val_act, config, position)
                 })
@@ -226,7 +277,7 @@ fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
     if let Some(row_delimiter) = config.field_delimiter.as_ref() {
         row.split(*row_delimiter)
             .enumerate()
-            .map(|(column, field)| Value::from_str(field, &config.decimal_separator))
+            .map(|(_, field)| Value::from_str(field, &config.decimal_separator))
             .collect()
     } else {
         vec![Value::from_str(row, &config.decimal_separator)]
@@ -255,13 +306,13 @@ fn both_string(actual: &Value, nominal: &Value) -> Option<(String, String)> {
 }
 
 fn compare_values(
-    nominal: Value,
-    actual: Value,
+    nominal: &Value,
+    actual: &Value,
     config: &CSVCompareConfig,
     position: Position,
 ) -> Vec<DiffType> {
     // float quantity compare
-    if let Some((actual_float, nominal_float)) = both_quantity(&actual, &actual) {
+    if let Some((actual_float, nominal_float)) = both_quantity(actual, nominal) {
         config
             .comparison_modes
             .iter()
@@ -278,7 +329,7 @@ fn compare_values(
                 }
             })
             .collect()
-    } else if let Some((actual_string, nominal_string)) = both_string(&actual, &nominal) {
+    } else if let Some((actual_string, nominal_string)) = both_string(actual, nominal) {
         if let Some(exclude_regex) = config.exclude_field_regex.as_deref() {
             let regex = Regex::new(exclude_regex).expect("Specified exclusion regex invalid!");
             if regex.is_match(nominal_string.as_str()) {
@@ -296,8 +347,8 @@ fn compare_values(
         }
     } else {
         vec![DiffType::DifferentValueTypes {
-            actual,
-            nominal,
+            actual: actual.clone(),
+            nominal: nominal.clone(),
             position,
         }]
     }
@@ -307,7 +358,7 @@ fn get_diffs_readers<R: Read + Seek>(
     nominal: R,
     actual: R,
     config: &CSVCompareConfig,
-) -> Vec<DiffType> {
+) -> (Table, Table, Vec<DiffType>) {
     let mut nominal = Table::from_reader(nominal, &config.delimiters);
     let mut actual = Table::from_reader(actual, &config.delimiters);
     info!("Running preprocessing steps");
@@ -317,7 +368,8 @@ fn get_diffs_readers<R: Read + Seek>(
             preprocessor.process(&mut actual);
         });
     }
-    compare_tables(nominal, actual, config)
+    let comparison_result = compare_tables(&nominal, &actual, config);
+    (nominal, actual, comparison_result)
 }
 
 pub fn compare_paths(
@@ -329,17 +381,19 @@ pub fn compare_paths(
     let nominal_file = File::open(nominal.as_ref()).expect("Could not open nominal file");
     let actual_file = File::open(actual.as_ref()).expect("Could not open nominal file");
 
-    let result = get_diffs_readers(&nominal_file, &actual_file, config);
-    result.iter().for_each(|error| {
+    let (nominal_table, actual_table, results) =
+        get_diffs_readers(&nominal_file, &actual_file, config);
+    results.iter().for_each(|error| {
         error!("{}", &error);
     });
 
     report::write_csv_detail(
+        nominal_table,
+        actual_table,
         nominal.as_ref(),
         actual.as_ref(),
-        &result,
+        results.as_slice(),
         rule_name,
-        &config.delimiters,
     )
 }
 
@@ -476,7 +530,6 @@ mod tests {
             position: mk_position(),
         };
         let msg = format!("{}", string_unequal);
-        println!("{}", msg);
         assert!(msg.contains("10 mm"));
         assert!(msg.contains("11"));
         assert!(msg.contains("12 um"));
@@ -501,6 +554,24 @@ mod tests {
     }
 
     #[test]
+    fn table_cols_reading_correct() {
+        let table = Table::from_reader(
+            File::open("tests/csv/data/Annotations.csv").unwrap(),
+            &Delimiters::default(),
+        );
+        assert_eq!(table.columns.len(), 13);
+    }
+
+    #[test]
+    fn table_rows_reading_correct() {
+        let table = Table::from_reader(
+            File::open("tests/csv/data/Annotations.csv").unwrap(),
+            &Delimiters::default(),
+        );
+        assert_eq!(table.rows().len(), 7);
+    }
+
+    #[test]
     fn identity_comparison_is_empty() {
         let config = CSVCompareConfig {
             exclude_field_regex: None,
@@ -512,8 +583,44 @@ mod tests {
         let actual = File::open("tests/csv/data/Annotations.csv").unwrap();
         let nominal = File::open("tests/csv/data/Annotations.csv").unwrap();
 
-        let diff = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
         assert!(diff.is_empty());
+    }
+
+    #[test]
+    fn diffs_on_table_level() {
+        let config = CSVCompareConfig {
+            preprocessing: None,
+            exclude_field_regex: Some(r"Surface".to_owned()),
+            comparison_modes: vec![],
+            delimiters: Delimiters::default(),
+        };
+
+        let actual = Table::from_reader(
+            File::open("tests/csv/data/DeviationHistogram.csv").unwrap(),
+            &config.delimiters,
+        );
+        let nominal = Table::from_reader(
+            File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap(),
+            &config.delimiters,
+        );
+
+        let diff = compare_tables(&nominal, &actual, &config);
+        assert_eq!(diff.len(), 1);
+        let first_diff = diff.first().unwrap();
+        if let DifferentValueTypes {
+            nominal,
+            actual,
+            position,
+        } = first_diff
+        {
+            assert_eq!(nominal.get_string().unwrap(), "different_type_here");
+            assert_eq!(actual.get_quantity().unwrap().value, 0.00204398);
+            assert_eq!(position.col, 1);
+            assert_eq!(position.row, 12);
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
@@ -522,16 +629,13 @@ mod tests {
             preprocessing: None,
             exclude_field_regex: Some(r"Surface".to_owned()),
             comparison_modes: vec![],
-            delimiters: Delimiters {
-                decimal_separator: Some('.'),
-                field_delimiter: Some(','),
-            },
+            delimiters: Delimiters::default(),
         };
 
         let actual = File::open("tests/csv/data/DeviationHistogram.csv").unwrap();
         let nominal = File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap();
 
-        let diff = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
         assert_eq!(diff.len(), 1);
         let first_diff = diff.first().unwrap();
         if let DifferentValueTypes {
@@ -553,16 +657,13 @@ mod tests {
             preprocessing: None,
             exclude_field_regex: Some(r"Surface".to_owned()),
             comparison_modes: vec![Mode::Absolute(0.5)],
-            delimiters: Delimiters {
-                decimal_separator: Some('.'),
-                field_delimiter: Some(','),
-            },
+            delimiters: Delimiters::default(),
         };
 
         let actual = File::open("tests/csv/data/DeviationHistogram.csv").unwrap();
         let nominal = File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap();
 
-        let diff = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
         // the different value type is still there, but we have 2 diffs over 0.5
         assert_eq!(diff.len(), 3);
     }
@@ -590,7 +691,7 @@ mod tests {
             preprocessing: None,
             exclude_field_regex: None,
             comparison_modes: vec![Mode::Absolute(0.5)],
-            delimiters: Delimiters::default(),
+            delimiters: Delimiters::autodetect(),
         };
 
         let actual = File::open(
@@ -602,7 +703,8 @@ mod tests {
         )
         .unwrap();
 
-        let diff = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
+        println!("{:?}", diff);
         // the different value type is still there, but we have 2 diffs over 0.5
         assert_eq!(diff.len(), 0);
     }
@@ -613,16 +715,13 @@ mod tests {
             preprocessing: None,
             exclude_field_regex: Some(r"Surface".to_owned()),
             comparison_modes: vec![Mode::Relative(0.1)],
-            delimiters: Delimiters {
-                decimal_separator: Some('.'),
-                field_delimiter: Some(','),
-            },
+            delimiters: Delimiters::default(),
         };
 
         let actual = File::open("tests/csv/data/DeviationHistogram.csv").unwrap();
         let nominal = File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap();
 
-        let diff = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
         // the different value type is still there, but we have 5 rel diffs over 0.1
         assert_eq!(diff.len(), 6);
     }
@@ -854,7 +953,8 @@ mod tests {
             exclude_field_regex: None,
             comparison_modes: vec![Mode::Absolute(0.0)],
         };
-        let res = get_diffs_readers(Cursor::new(str_with_bom), Cursor::new(str_no_bom), &cfg);
+        let (_, _, res) =
+            get_diffs_readers(Cursor::new(str_with_bom), Cursor::new(str_no_bom), &cfg);
         assert!(res.is_empty());
     }
 }
