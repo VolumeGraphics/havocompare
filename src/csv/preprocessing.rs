@@ -145,4 +145,21 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_sort_by_id() {
+        let mut table = setup_table(None);
+        extract_headers(&mut table);
+        let column = 1;
+        sort_by_column_id(&mut table, column);
+        let mut peekable_rows = table.rows().peekable();
+        while let Some(row) = peekable_rows.next() {
+            if let Some(next_row) = peekable_rows.peek() {
+                assert!(
+                    row.get(column).unwrap().get_quantity().unwrap().value
+                        >= next_row.get(column).unwrap().get_quantity().unwrap().value
+                );
+            }
+        }
+    }
 }
