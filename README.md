@@ -59,6 +59,11 @@ deviation ('Absolute').
 You can specify the decimal separator and the field separator. If you don't specify, havocompare will try to guess it from each csv file.
 Note: If delimiters are not specified, even different delimiters between nominal and actual are accepted as long as all deviations are in bounds.
 To ignore specific cells, you can specify an exclusion regex.
+
+The preprocessing steps are done after the file is parsed using the given delimiters (or guessing) but before anything else. Processing order is as written in the list.
+In the below example, headers will be extracted from the csv-input file, then a column with the title "Columnn to delete" will be deleted.
+If any of the preprocessing steps fail, havocompare will exit with an error immediately so use them carefully.
+
 See the following example with all optional parameters set:
 ```yaml
 rules:
@@ -72,6 +77,12 @@ rules:
         - Absolute: 1.0
         - Relative: 0.1
       exclude_field_regex: "Excluded"
+      preprocessing:
+        - ExtractHeaders
+        - SortByColumnNumber: 0
+        - DeleteColumnByName: "Column to delete"
+        - DeleteColumnByNumber: 1
+        - SortByColumnName: "Sort by column name blabla"
 ```
 
 #### Image comparison
