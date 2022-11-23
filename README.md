@@ -28,15 +28,15 @@ rules:
         - Relative: 0.1
         - Absolute: 1.0
 ```
-It creates a new rule named rule including all files matching "export_*.csv" in all subfolders but exclude "export_1337.csv".
+It creates a new rule named rule including all files matching "export_*.csv" in all sub-folders but exclude "export_1337.csv".
 String cells will be checked for perfect identity, numbers (including numbers with units) will be checked for a relative deviation smaller than `0.1`
 AND absolute deviation smaller than `1.0`.
 
 __Comparison rules__
 - Relative means validity is checked like: `|nominal - actual| / |nominal| < tolerance`
 - Absolute means validity is checked like: `|nominal - actual| < tolerance`
-- "nan" and "nan" is valid
-- `0` difference with `0` nominal value is valid
+- "nan" and "nan" is equal
+- `0` difference with `0` nominal value is valid for any relative difference
 
 ### 2. Run the compare
 
@@ -67,21 +67,32 @@ If any of the preprocessing steps fail, havocompare will exit with an error imme
 See the following example with all optional parameters set:
 ```yaml
 rules:
-  - name: "All options"
+  - name: "CSV - Demo all options"
+    # what files to include
     pattern_include: "**/*.csv"
+    # optional: of all included files, remove the ones matching the exclude pattern
     pattern_exclude: "**/ignored.csv"
     CSV:
+      # delimiters are optional, if not given, they will be auto-detected.
+      # auto-detection allows different delimiters for nominal and actual
       decimal_separator: '.'
       field_delimiter:  ';'
+      # can have Absolute or Relative
       comparison_modes:
         - Absolute: 1.0
         - Relative: 0.1
+      # optional: exclude fields matching the regex from comparison
       exclude_field_regex: "Excluded"
+      # optional: preprocessing of the csv files
       preprocessing:
+        # extracts the headers to the header-fields, makes reportings more legible and allows for further processing "ByName"
         - ExtractHeaders
+        # Sort the table by column 0, beware that the column must only contain numbers / quantities
         - SortByColumnNumber: 0
+        # Delete a column by name, needs `ExtractHeaders` first
         - DeleteColumnByName: "Column to delete"
         - DeleteColumnByNumber: 1
+        # Sorts are stable, so a second sort will keep the first sort as sub-order.
         - SortByColumnName: "Sort by column name blabla"
 ```
 
@@ -94,6 +105,8 @@ rules:
     pattern_include: "**/*.jpg"
     # exclude can of course also be specified!
     Image:
+      # threshold is between 0.0 for total difference, 0.5 for very dissimilar and 1.0 for perfect mach
+      # Usually you want to test with values between 0.90 and 0.97
       threshold: 0.9
 ```
 
@@ -106,7 +119,9 @@ crate is used. You can ignore single lines which you know are different by speci
     pattern_exclude: "**/*_changed.html"
     pattern_include: "**/*.html"
     PlainText:
+      # Normalized Damerau-Levenshtein distance
       threshold: 1.0
+      # All lines matching any regex below will be ignored
       ignore_lines:
         - "stylesheet"
         - "next_ignore"
@@ -122,11 +137,16 @@ Currently we only support SHA-256 but more checks can be added easily.
   - name: "Hash comparison strict"
     pattern_exclude: "**/*.bin"
     Hash:
+      # Currently we only have Sha256
       function: Sha256
 ```
 
 
 ## Changelog
+
+### 0.1.4
+- Add preprocessing options for CSV files
+- Refined readme.md
 
 ### 0.1.3:
 - Add optional cli argument to configure the folder to store the report
