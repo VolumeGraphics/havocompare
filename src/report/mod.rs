@@ -1,6 +1,6 @@
 mod template;
 
-use crate::csv::{split_to_fields, Delimiters, DiffType};
+use crate::csv::{DiffType, Position, Table};
 use serde::Serialize;
 use std::fs;
 use std::fs::File;
@@ -104,11 +104,12 @@ pub fn write_html_detail(
 }
 
 pub fn write_csv_detail(
+    nominal_table: Table,
+    actual_table: Table,
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[DiffType],
     rule_name: &str,
-    delimiter: &Delimiters,
 ) -> FileCompareResult {
     let mut result = FileCompareResult {
         nominal: nominal.as_ref().to_string_lossy().to_string(),
@@ -117,69 +118,64 @@ pub fn write_csv_detail(
         detail_path: None,
     };
 
-    //TODO: a better way to do this ?
-    //convert this somehow to html
-    let nominal_file = File::open(nominal.as_ref()).expect("Could not open nominal file");
-    let actual_file = File::open(actual.as_ref()).expect("Could not open nominal file");
-    let nominal_fields = split_to_fields(nominal_file, delimiter);
-    let actual_fields = split_to_fields(actual_file, delimiter);
+    let headers: Vec<_> = nominal_table
+        .columns
+        .iter()
+        .zip(actual_table.columns.iter())
+        .map(|(n, a)| CSVReport {
+            actual_value: a
+                .header
+                .as_deref()
+                .unwrap_or("Header preprocessing not enabled in config")
+                .to_owned(),
+            nominal_value: n
+                .header
+                .as_deref()
+                .unwrap_or("Header preprocessing not enabled in config")
+                .to_owned(),
+            diffs: Vec::new(),
+        })
+        .collect();
 
-    let mut rows: Vec<Vec<CSVReport>> = Vec::new();
-    let mut headers: Vec<CSVReport> = Vec::new();
-    let mut columns: Vec<CSVReport> = Vec::new();
+    let rows: Vec<Vec<_>> = nominal_table
+        .rows()
+        .zip(actual_table.rows())
+        .enumerate()
+        .map(|(row, (n, a))| {
+            n.into_iter()
+                .zip(a.into_iter())
+                .enumerate()
+                .map(|(col, (n, a))| {
+                    let current_pos = Position { col, row };
+                    CSVReport {
+                        nominal_value: n.to_string(),
+                        actual_value: a.to_string(),
+                        diffs: diffs
+                            .iter()
+                            .filter(|diff| {
+                                let position = match diff {
+                                    DiffType::UnequalStrings { position, .. } => position,
+                                    DiffType::OutOfTolerance { position, .. } => position,
+                                    DiffType::DifferentValueTypes { position, .. } => position,
+                                };
 
-    let mut previous_row: usize = 0;
-
-    let mut iter = nominal_fields
-        .into_iter()
-        .zip(actual_fields.into_iter())
-        .peekable();
-
-    while iter.peek().is_some() {
-        if let Some((nominal, actual)) = iter.peek() {
-            //reset column if the row change
-            if previous_row != nominal.position.row {
-                if previous_row == 0 {
-                    headers = columns;
-                } else {
-                    rows.push(columns);
-                }
-
-                columns = Vec::new();
-            }
-
-            columns.push(CSVReport {
-                nominal_value: nominal.value.to_string(),
-                actual_value: actual.value.to_string(),
-                diffs: diffs
-                    .iter()
-                    .filter(|diff| {
-                        let position = match diff {
-                            DiffType::UnequalStrings { position, .. } => position,
-                            DiffType::OutOfTolerance { position, .. } => position,
-                            DiffType::DifferentValueTypes { position, .. } => position,
-                        };
-
-                        position.row == nominal.position.row && position.col == nominal.position.col
-                    })
-                    .map(|diff| match diff {
-                        DiffType::UnequalStrings { .. } => "Different strings".to_owned(),
-                        DiffType::OutOfTolerance { mode, .. } => {
-                            format!("Out of tolerance. Mode: {}", mode)
-                        }
-                        DiffType::DifferentValueTypes { .. } => "Different value types".to_owned(),
-                    })
-                    .collect(),
-            });
-
-            previous_row = nominal.position.row;
-        }
-
-        iter.next();
-    }
-
-    //last entry
-    rows.push(columns.clone());
+                                position.row == current_pos.row && position.col == current_pos.col
+                            })
+                            .map(|diff| match diff {
+                                DiffType::UnequalStrings { .. } => "Different strings".to_owned(),
+                                DiffType::OutOfTolerance { mode, .. } => {
+                                    format!("Out of tolerance. Mode: {}", mode)
+                                }
+                                DiffType::DifferentValueTypes { .. } => {
+                                    "Different value types".to_owned()
+                                }
+                            })
+                            .collect(),
+                    }
+                })
+                .collect()
+        })
+        .collect();
 
     let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref());
 

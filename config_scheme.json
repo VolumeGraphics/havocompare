@@ -47,6 +47,15 @@
           ],
           "maxLength": 1,
           "minLength": 1
+        },
+        "preprocessing": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Preprocessor"
+          }
         }
       }
     },
@@ -130,6 +139,68 @@
             "Relative": {
               "type": "number",
               "format": "float"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Preprocessor": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ExtractHeaders"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "DeleteColumnByNumber"
+          ],
+          "properties": {
+            "DeleteColumnByNumber": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "DeleteColumnByName"
+          ],
+          "properties": {
+            "DeleteColumnByName": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "SortByColumnName"
+          ],
+          "properties": {
+            "SortByColumnName": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "SortByColumnNumber"
+          ],
+          "properties": {
+            "SortByColumnNumber": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
             }
           },
           "additionalProperties": false
