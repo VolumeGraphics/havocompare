@@ -12,6 +12,8 @@ pub enum Preprocessor {
     DeleteColumnByName(String),
     SortByColumnName(String),
     SortByColumnNumber(usize),
+    DeleteRowByNumber(usize),
+    DeleteRowByRegex(String),
 }
 
 impl Preprocessor {
@@ -22,8 +24,30 @@ impl Preprocessor {
             Preprocessor::DeleteColumnByName(name) => delete_column_name(table, name.as_str()),
             Preprocessor::SortByColumnName(name) => sort_by_column_name(table, name.as_str()),
             Preprocessor::SortByColumnNumber(id) => sort_by_column_id(table, *id),
+            Preprocessor::DeleteRowByNumber(id) => delete_row_by_number(table, *id),
+            Preprocessor::DeleteRowByRegex(regex) => delete_row_by_regex(table, regex),
         }
     }
+}
+
+fn delete_row_by_regex(table: &mut Table, regex: &str) {
+    let regex = regex::Regex::new(regex).unwrap();
+    table
+        .rows_mut()
+        .filter(|row| row.iter().any(|v| regex.is_match(v.to_string().as_str())))
+        .for_each(|mut row| {
+            row.iter_mut()
+                .for_each(|v| **v = Value::from_str("DELETED", &None))
+        });
+}
+
+fn delete_row_by_number(table: &mut Table, id: usize) {
+    table
+        .rows_mut()
+        .nth(id)
+        .unwrap()
+        .iter_mut()
+        .for_each(|v| **v = Value::from_str("DELETED", &None));
 }
 
 fn get_permutation(rows_to_sort_by: &Vec<Value>) -> permutation::Permutation {
@@ -127,6 +151,44 @@ mod tests {
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Deviation [mm]"
+        );
+    }
+
+    #[test]
+    fn test_delete_row_by_id() {
+        let mut table = setup_table(None);
+        delete_row_by_number(&mut table, 0);
+        assert_eq!(
+            table
+                .columns
+                .first()
+                .unwrap()
+                .rows
+                .first()
+                .unwrap()
+                .get_string()
+                .as_deref()
+                .unwrap(),
+            "DELETED"
+        );
+    }
+
+    #[test]
+    fn test_delete_row_by_regex() {
+        let mut table = setup_table(None);
+        delete_row_by_regex(&mut table, "mm");
+        assert_eq!(
+            table
+                .columns
+                .first()
+                .unwrap()
+                .rows
+                .first()
+                .unwrap()
+                .get_string()
+                .as_deref()
+                .unwrap(),
+            "DELETED"
         );
     }
 

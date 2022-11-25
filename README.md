@@ -94,6 +94,10 @@ rules:
         - DeleteColumnByNumber: 1
         # Sorts are stable, so a second sort will keep the first sort as sub-order.
         - SortByColumnName: "Sort by column name blabla"
+        # Deletes the first row by setting all values to 'DELETED's - meaning that numbering stays constant 
+        - DeleteRowByNumber: 0
+        # Deletes rows having any element matching the given regex (may delete different lines in nom / act!
+        - DeleteRowByRegex: "Vertex_Count"
 ```
 
 #### Image comparison
