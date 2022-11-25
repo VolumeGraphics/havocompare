@@ -204,6 +204,32 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "DeleteRowByNumber"
+          ],
+          "properties": {
+            "DeleteRowByNumber": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "DeleteRowByRegex"
+          ],
+          "properties": {
+            "DeleteRowByRegex": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
