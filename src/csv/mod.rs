@@ -12,10 +12,11 @@ use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek};
 use std::path::Path;
+use std::slice::{Iter, IterMut};
 use tracing::{debug, error, info};
 
 #[derive(Clone, Copy, Debug)]
@@ -178,7 +179,7 @@ impl Delimiters {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Column {
     pub header: Option<String>,
     pub rows: Vec<Value>,
@@ -214,42 +215,59 @@ impl Table {
 
     pub fn rows(&self) -> RowIterator {
         RowIterator {
-            table: self,
-            current_idx: 0,
+            position: self.columns.iter().map(|c| c.rows.iter()).collect(),
+        }
+    }
+
+    pub fn rows_mut(&mut self) -> RowIteratorMut {
+        RowIteratorMut {
+            position: self.columns.iter_mut().map(|c| c.rows.iter_mut()).collect(),
         }
     }
 }
 
-pub struct RowIterator<'a> {
-    current_idx: usize,
-    table: &'a Table,
+macro_rules! mk_next {
+    ($pos: expr) => {{
+        let row: Vec<_> = $pos.iter_mut().filter_map(|i| i.next()).collect();
+        if row.is_empty() {
+            None
+        } else {
+            Some(row)
+        }
+    }};
 }
 
-impl<'a> ExactSizeIterator for RowIterator<'a> {
-    fn len(&self) -> usize {
-        self.table
-            .columns
-            .first()
-            .map(|c| c.rows.len())
-            .unwrap_or(0)
+macro_rules! impl_ex_size_it {
+    ($($t:ty),+) => {
+        $(impl<'a> ExactSizeIterator for $t {
+            fn len(&self) -> usize {
+                self.position.first().unwrap().len()
+            }
+        })+
+    };
+}
+
+impl_ex_size_it!(RowIteratorMut<'_>, RowIterator<'_>);
+
+pub struct RowIteratorMut<'a> {
+    position: Vec<IterMut<'a, Value>>,
+}
+
+impl<'a> Iterator for RowIteratorMut<'a> {
+    type Item = Vec<&'a mut Value>;
+    fn next(&mut self) -> Option<Self::Item> {
+        mk_next!(self.position)
     }
+}
+
+pub struct RowIterator<'a> {
+    position: Vec<Iter<'a, Value>>,
 }
 
 impl<'a> Iterator for RowIterator<'a> {
     type Item = Vec<&'a Value>;
     fn next(&mut self) -> Option<Self::Item> {
-        let row: Vec<_> = self
-            .table
-            .columns
-            .iter()
-            .filter_map(|c| c.rows.get(self.current_idx))
-            .collect();
-        self.current_idx += 1;
-        if row.len() == self.table.columns.len() {
-            Some(row)
-        } else {
-            None
-        }
+        mk_next!(self.position)
     }
 }
 
@@ -546,7 +564,6 @@ mod tests {
             position: mk_position(),
         };
         let msg = format!("{}", string_unequal);
-        println!("{}", msg);
         assert!(msg.contains("10 mm"));
         assert!(msg.contains(ACTUAL));
         assert!(msg.contains(format!("{}", POS_COL).as_str()));
@@ -704,7 +721,6 @@ mod tests {
         .unwrap();
 
         let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
-        println!("{:?}", diff);
         // the different value type is still there, but we have 2 diffs over 0.5
         assert_eq!(diff.len(), 0);
     }
@@ -956,5 +972,57 @@ mod tests {
         let (_, _, res) =
             get_diffs_readers(Cursor::new(str_with_bom), Cursor::new(str_no_bom), &cfg);
         assert!(res.is_empty());
+    }
+
+    fn mk_test_table() -> Table {
+        let col = Column {
+            rows: vec![
+                Value::from_str("0.0", &None),
+                Value::from_str("1.0", &None),
+                Value::from_str("2.0", &None),
+            ],
+            header: None,
+        };
+
+        let col_two = col.clone();
+        Table {
+            columns: vec![col, col_two],
+        }
+    }
+
+    #[test]
+    fn row_iterator() {
+        let table = mk_test_table();
+        let mut row_iterator = table.rows();
+        assert_eq!(row_iterator.len(), 3);
+        let first_row = row_iterator.next().unwrap();
+        assert!(first_row
+            .iter()
+            .all(|v| **v == Value::from_str("0.0", &None)));
+        for row in row_iterator {
+            assert_eq!(row.len(), 2);
+        }
+    }
+
+    #[test]
+    fn row_iterator_mut() {
+        let mut table = mk_test_table();
+        let mut row_iterator = table.rows_mut();
+        assert_eq!(row_iterator.len(), 3);
+        let first_row = row_iterator.next().unwrap();
+        assert!(first_row
+            .iter()
+            .all(|v| **v == Value::from_str("0.0", &None)));
+        for row in row_iterator {
+            assert_eq!(row.len(), 2);
+        }
+        let row_iterator = table.rows_mut();
+        for mut row in row_iterator {
+            assert_eq!(row.len(), 2);
+            row.iter_mut()
+                .for_each(|v| **v = Value::from_str("4.0", &None));
+        }
+        let mut row_iterator = table.rows();
+        assert!(row_iterator.all(|r| r.iter().all(|v| **v == Value::from_str("4.0", &None))));
     }
 }
