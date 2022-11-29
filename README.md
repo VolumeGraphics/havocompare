@@ -151,6 +151,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 ### 0.1.4
 - Add preprocessing options for CSV files
 - Refined readme.md
+- fix unique key creation in the report generation
 
 ### 0.1.3:
 - Add optional cli argument to configure the folder to store the report
