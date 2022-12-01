@@ -281,11 +281,11 @@ pub(crate) fn create(rule_results: &[RuleResult], report_path: impl AsRef<Path>)
     let report_dir = report_path.as_ref();
     if report_dir.is_dir() {
         info!("Delete report folder");
-        fs::remove_dir_all(&report_dir).expect("Can't delete report folder");
+        fs::remove_dir_all(report_dir).expect("Can't delete report folder");
     }
 
     info!("create report folder");
-    fs::create_dir(&report_dir).expect("Can't create report folder");
+    fs::create_dir(report_dir).expect("Can't create report folder");
 
     //move folders
     for rule_result in rule_results.iter() {
