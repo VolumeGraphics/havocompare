@@ -168,6 +168,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 ### 0.1.4
 - Add preprocessing options for CSV files
 - Refined readme.md
+- fix unique key creation in the report generation
 - Add PDF-Text compare
 
 ### 0.1.3:

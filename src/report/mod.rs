@@ -34,12 +34,15 @@ pub fn create_sub_folder(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
 ) -> PathBuf {
-    let joined_file_names = nominal
+    let mut joined_file_names = nominal
         .as_ref()
-        .join(rule_name)
-        .join(actual.as_ref().to_string_lossy().to_string())
         .to_string_lossy()
         .to_string();
+
+    joined_file_names.push_str(actual.as_ref().to_string_lossy().to_string().as_str());
+    joined_file_names.push_str(rule_name);
+
+    debug!("Joined name: {}", &joined_file_names);
 
     let key = format!("havoc-{:x}", md5::compute(joined_file_names.as_bytes()));
 
