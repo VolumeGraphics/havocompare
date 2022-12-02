@@ -355,6 +355,10 @@ pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r###"
 		}
 
 		.has_diff {
+			color: #0d6efdf0;
+		}
+
+		.has_error {
 			color:red;
 		}
 
@@ -397,6 +401,8 @@ The extracted exact text can be downloaded here: <a href="./{{ nominal_extracted
 			<td>{{ line.nominal_value|safe }}</td>
 			<td>
 				{% if line.diffs|length > 0 %}
+					<span class="has_error">{{ line.actual_value|safe }}</span>
+				{% elif line.actual_value != line.nominal_value %}
 					<span class="has_diff">{{ line.actual_value|safe }}</span>
 				{% else %}
 					{{ line.actual_value|safe }}
