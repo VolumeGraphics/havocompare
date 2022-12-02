@@ -318,3 +318,121 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 </body>
 </html>
 "###;
+
+pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r###"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Error(s)</title>
+     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+
+     <style>
+
+		h3 {
+			background-color:black;
+			color:white;
+			padding:10px;
+			margin:10px 0;
+			cursor:pointer;
+		}
+
+		table {
+		  table-layout: fixed;
+		}
+
+        table.dataTable tr.odd {
+            background-color: #dddddd;
+        }
+
+        .helper {
+        	color:orange;
+        	font-weight:bold;
+        }
+
+		.helper a {
+			color:orange;
+		}
+
+		.has_diff {
+			color:red;
+		}
+
+		#compare th {
+			text-align:left;
+			background-color: #cccccc;
+			padding:10px;
+		}
+
+		#compare td:first-child {
+			border-right: 1px solid black;
+		}
+
+		table#compare {
+			border:1px solid grey;
+		}
+
+    </style>
+</head>
+<body>
+
+<h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
+
+<div class="helper">
+This is for viewing only.
+The extracted exact text can be downloaded here: <a href="./{{ nominal_extracted_filename }}">nominal</a> and <a href="./{{ actual_extracted_filename }}">actual</a>
+</div>
+<table id="compare">
+	<thead>
+		<tr>
+			<th></th>
+			<th>Nominal</th>
+			<th>Actual</th>
+		</tr>
+	</thead>
+	<tbody>
+	{% for line in combined_lines %}
+		<tr>
+			<td>{{ loop.index }}</td>
+			<td>{{ line.nominal_value|safe }}</td>
+			<td>
+				{% if line.diffs|length > 0 %}
+					<span class="has_diff">{{ line.actual_value|safe }}</span>
+				{% else %}
+					{{ line.actual_value|safe }}
+				{% endif %}
+			</td>
+		</tr>
+	{% endfor %}
+	</tbody>
+</table>
+
+<br>
+<br>
+
+<table id="report">
+    <thead>
+    <tr>
+        <th>Error</th>
+    </tr>
+    </thead>
+    <tbody>
+        {% for error in errors %}
+            <tr>
+                <td>{{ error }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        let table = new DataTable('#report');
+    });
+</script>
+
+</body>
+</html>
+"###;

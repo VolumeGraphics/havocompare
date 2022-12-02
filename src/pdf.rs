@@ -1,55 +1,68 @@
-use crate::html::compare_files as html_compare_files;
 use crate::html::HTMLCompareConfig;
 use crate::report;
 use pdf_extract::extract_text;
-use std::fs;
+use regex::Regex;
 use std::path::Path;
-use tracing::info;
-
-const TXT_EXTENSION: &str = "txt";
+use strsim::normalized_damerau_levenshtein;
+use tracing::{error, info};
 
 pub fn compare_files<P: AsRef<Path>>(
-    actual_path: P,
     nominal_path: P,
+    actual_path: P,
     config: &HTMLCompareConfig,
     rule_name: &str,
 ) -> report::FileCompareResult {
-    let temp_dir =
-        tempdir::TempDir::new("hvc_pdf").expect("Could not generate temporary directory for pdf");
-    let temp_dir = temp_dir.path();
-
     info!("Extracting text from actual pdf");
-    let actual_string =
+    let actual =
         extract_text(actual_path.as_ref()).expect("Could not extract text from actual pdf");
-    let actual_file_name = actual_path
-        .as_ref()
-        .file_name()
-        .expect("Could not get pdf name")
-        .to_string_lossy()
-        .to_string();
-    let actual_file_name = format!("{}.actual.{}", actual_file_name, TXT_EXTENSION);
-    let actual_file = temp_dir.join(actual_file_name);
-
-    info!("Writing temporary actual text file");
-    fs::write(&actual_file, actual_string.as_bytes()).expect("Could not create file");
 
     info!("Extracting text from nominal pdf");
-    let nominal_string =
+    let nominal =
         extract_text(nominal_path.as_ref()).expect("Could not extract text from nominal pdf");
-    let nominal_file_name = nominal_path
+
+    let mut diffs: Vec<(usize, String)> = Vec::new();
+
+    let exclusion_list: Vec<_> = config
+        .ignore_lines
         .as_ref()
-        .file_name()
-        .expect("Could not get pdf name")
-        .to_string_lossy()
-        .to_string();
-    let nominal_file_name = format!("{}.nominal.{}", nominal_file_name, TXT_EXTENSION);
+        .map(|v| {
+            v.iter()
+                .map(|exc| Regex::new(exc).expect("Plaintext exclusion regex broken!"))
+                .collect()
+        })
+        .unwrap_or_default();
 
-    info!("Writing temporary nominal text file");
-    let nominal_file = temp_dir.join(nominal_file_name);
+    actual
+        .lines()
+        .enumerate()
+        .into_iter()
+        .zip(nominal.lines().into_iter())
+        .filter(|((_, a), n)|
+            exclusion_list.iter().all(|exc| !exc.is_match(a)) && exclusion_list.iter().all(|exc| !exc.is_match(n))
+        )
+        .for_each(|((l, a), n)| {
+            let distance = normalized_damerau_levenshtein(a,n);
+            if  distance < config.threshold {
 
-    fs::write(&nominal_file, nominal_string.as_bytes()).expect("Could not create file");
+                let error =  format!(
+                    "Missmatch in PDF-Text-file in line {}. Expected: '{}' found '{}' (diff: {}, threshold: {})",
+                    l, n, a, distance, config.threshold
+                );
 
-    html_compare_files(actual_file, nominal_file, config, rule_name)
+                error!("{}" , &error);
+
+                diffs.push((l, error));
+            }
+        });
+
+    report::write_pdf_detail(
+        nominal_path.as_ref(),
+        actual_path.as_ref(),
+        &nominal,
+        &actual,
+        &diffs,
+        rule_name,
+    )
 }
 
 #[cfg(test)]
