@@ -11,6 +11,7 @@ mod csv;
 mod hash;
 mod html;
 mod image;
+mod pdf;
 mod report;
 
 use crate::hash::HashConfig;
@@ -34,6 +35,8 @@ enum ComparisonMode {
     PlainText(HTMLCompareConfig),
     /// Compare using file hashes
     Hash(HashConfig),
+    /// PDF text compare
+    PDFText(HTMLCompareConfig),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -98,6 +101,9 @@ fn process_file(
         }
         ComparisonMode::Hash(conf) => {
             hash::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+        }
+        ComparisonMode::PDFText(conf) => {
+            pdf::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
         }
     };
 

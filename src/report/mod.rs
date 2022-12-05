@@ -280,15 +280,94 @@ pub fn write_image_detail(
     result
 }
 
+pub fn write_pdf_detail(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    nominal_string: &String,
+    actual_string: &String,
+    diffs: &[(usize, String)],
+    rule_name: &str,
+) -> FileCompareResult {
+    let mut result = FileCompareResult {
+        nominal: nominal.as_ref().to_string_lossy().to_string(),
+        actual: actual.as_ref().to_string_lossy().to_string(),
+        is_error: false,
+        detail_path: None,
+    };
+
+    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref());
+
+    let nominal_extracted_filename = "nominal_extracted_text.txt";
+    let actual_extracted_filename = "actual_extracted_text.txt";
+
+    let nominal_extracted_file = sub_folder.join(nominal_extracted_filename);
+    fs::write(nominal_extracted_file, nominal_string.as_bytes()).expect("Could not write file");
+
+    let actual_extracted_file = sub_folder.join(actual_extracted_filename);
+    fs::write(actual_extracted_file, actual_string.as_bytes()).expect("Could not write file");
+    info!("Extracted text written to files");
+
+    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+
+    let mut tera = Tera::default();
+    tera.add_raw_template(
+        &detail_file.to_string_lossy(),
+        template::PLAIN_PDF_DETAIL_TEMPLATE,
+    )
+    .expect("Can't add raw template for detail.html");
+
+    let combined_lines: Vec<CSVReport> = actual_string
+        .lines()
+        .enumerate()
+        .into_iter()
+        .zip(nominal_string.lines().into_iter())
+        .map(|((l, a), n)| {
+            let mut result = CSVReport {
+                nominal_value: n.replace(' ', "&nbsp;"),
+                actual_value: a.replace(' ', "&nbsp;"),
+                diffs: vec![],
+            };
+
+            if let Some(diff) = diffs.iter().find(|(i, _msg)| *i == l) {
+                result.diffs.push(diff.1.clone());
+            };
+
+            result
+        })
+        .collect();
+
+    let mut ctx = Context::new();
+    ctx.insert("actual", &actual.as_ref().to_string_lossy());
+    ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
+    ctx.insert("diffs", &diffs);
+    ctx.insert("combined_lines", &combined_lines);
+    ctx.insert("nominal_extracted_filename", nominal_extracted_filename);
+    ctx.insert("actual_extracted_filename", actual_extracted_filename);
+
+    ctx.insert("errors", diffs);
+
+    let file = File::create(&detail_file).expect("Can't create detail.html");
+
+    info!("detail html {:?} created", &detail_file);
+
+    tera.render_to(&detail_file.to_string_lossy(), &ctx, file)
+        .expect("Can't render to detail.html");
+
+    result.is_error = !diffs.is_empty();
+    result.detail_path = Some(sub_folder);
+
+    result
+}
+
 pub(crate) fn create(rule_results: &[RuleResult], report_path: impl AsRef<Path>) {
     let report_dir = report_path.as_ref();
     if report_dir.is_dir() {
         info!("Delete report folder");
-        fs::remove_dir_all(&report_dir).expect("Can't delete report folder");
+        fs::remove_dir_all(report_dir).expect("Can't delete report folder");
     }
 
     info!("create report folder");
-    fs::create_dir(&report_dir).expect("Can't create report folder");
+    fs::create_dir(report_dir).expect("Can't create report folder");
 
     //move folders
     for rule_result in rule_results.iter() {

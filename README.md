@@ -132,6 +132,23 @@ crate is used. You can ignore single lines which you know are different by speci
         - "[A-Z]*[0-9]"
 ```
 
+#### PDF text comparison
+For PDF text comparison the text will be extracted and written to temporary files. The files will then be compared using the Plain text comparison:
+
+```yaml
+  - name: "PDF-Text-Compare"
+    pattern_exclude: "**/*_changed.pdf"
+    pattern_include: "**/*.pdf"
+    PDFText:
+      # Normalized Damerau-Levenshtein distance
+      threshold: 1.0
+      # All lines matching any regex below will be ignored
+      ignore_lines:
+        - "stylesheet"
+        - "next_ignore"
+        - "[A-Z]*[0-9]"
+```
+
 
 #### Hash comparison
 For binary files which cannot otherwise be checked we can also do a simple hash comparison.
@@ -152,6 +169,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 - Add preprocessing options for CSV files
 - Refined readme.md
 - fix unique key creation in the report generation
+- Add PDF-Text compare
 
 ### 0.1.3:
 - Add optional cli argument to configure the folder to store the report

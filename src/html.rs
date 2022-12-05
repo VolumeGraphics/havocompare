@@ -10,8 +10,8 @@ use tracing::error;
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct HTMLCompareConfig {
-    threshold: f64,
-    ignore_lines: Option<Vec<String>>,
+    pub threshold: f64,
+    pub ignore_lines: Option<Vec<String>>,
 }
 
 impl Default for HTMLCompareConfig {
