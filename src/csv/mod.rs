@@ -17,7 +17,17 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek};
 use std::path::Path;
 use std::slice::{Iter, IterMut};
+use thiserror::Error;
 use tracing::{debug, error, info};
+
+#[derive(Error, Debug)]
+/// Possible errors during csv parsing
+pub enum Error {
+    #[error("Unexpected Value found {0} - {1}")]
+    UnexpectedValue(Value, String),
+    #[error("Tried accessing empty field")]
+    AccessError(String),
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Position {

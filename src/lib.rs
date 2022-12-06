@@ -6,6 +6,8 @@
 #![warn(missing_docs)]
 #![warn(unused_qualifications)]
 #![deny(deprecated)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
 
 mod csv;
 mod hash;
@@ -22,7 +24,20 @@ use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 use tracing::{debug, error, info};
+
+#[derive(Error, Debug)]
+/// Top-Level Error class for all errors that can happen during havocompare-running
+pub enum Error {
+    /// Attempted to glob an illegal pattern
+    #[error("Failed to evaluate globbing pattern! {0}")]
+    IllegalGlobbingPattern(#[from] glob::PatternError),
+    #[error("Failed to compile regex! {0}")]
+    RegexCompilationError(#[from] regex::Error),
+    #[error("CSV module error")]
+    CSVModuleError(#[from] csv::Error),
+}
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[allow(clippy::upper_case_acronyms)]
@@ -53,17 +68,16 @@ struct Rule {
     file_type: ComparisonMode,
 }
 
-fn glob_files(path: impl AsRef<Path>, pattern: Option<&str>) -> Vec<PathBuf> {
+fn glob_files(path: impl AsRef<Path>, pattern: Option<&str>) -> Result<Vec<PathBuf>, Error> {
     if let Some(pattern) = pattern {
         let path_prefix = path.as_ref().join(pattern);
         let path_pattern = path_prefix.to_string_lossy();
         debug!("Globbing: {}", path_pattern);
-        glob::glob(path_pattern.as_ref())
-            .unwrap()
+        Ok(glob::glob(path_pattern.as_ref())?
             .filter_map(|c| c.ok())
-            .collect()
+            .collect())
     } else {
-        Vec::new()
+        Ok(Vec::new())
     }
 }
 
@@ -121,29 +135,29 @@ fn process_rule(
     actual: impl AsRef<Path>,
     rule: &Rule,
     compare_results: &mut Vec<FileCompareResult>,
-) -> bool {
+) -> Result<bool, Error> {
     info!("Processing rule: {}", rule.name.as_str());
     if !nominal.as_ref().is_dir() {
         error!(
             "Nominal folder {} is not a folder",
             nominal.as_ref().to_string_lossy()
         );
-        return false;
+        return Ok(false);
     }
     if !actual.as_ref().is_dir() {
         error!(
             "Actual folder {} is not a folder",
             actual.as_ref().to_string_lossy()
         );
-        return false;
+        return Ok(false);
     }
 
-    let nominal_files_exclude = glob_files(nominal.as_ref(), rule.pattern_exclude.as_deref());
-    let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), Some(rule.pattern_include.as_str()));
+    let nominal_files_exclude = glob_files(nominal.as_ref(), rule.pattern_exclude.as_deref())?;
+    let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), Some(rule.pattern_include.as_str()))?;
     let nominal_cleaned_paths = filter_exclude(nominal_paths, nominal_files_exclude);
 
-    let actual_files_exclude = glob_files(actual.as_ref(), rule.pattern_exclude.as_deref());
-    let actual_paths: Vec<_> = glob_files(actual.as_ref(), Some(rule.pattern_include.as_str()));
+    let actual_files_exclude = glob_files(actual.as_ref(), rule.pattern_exclude.as_deref())?;
+    let actual_paths: Vec<_> = glob_files(actual.as_ref(), Some(rule.pattern_include.as_str()))?;
     let actual_cleaned_paths = filter_exclude(actual_paths, actual_files_exclude);
 
     info!(
@@ -164,7 +178,7 @@ fn process_rule(
             compare_results.push(compare_result);
         });
 
-    all_okay
+    Ok(all_okay)
 }
 
 /// The main function for comparing folders. It will parse a config file in yaml format, create a report in report_path and compare the folders nominal and actual.
@@ -173,14 +187,13 @@ pub fn compare_folders(
     actual: impl AsRef<Path>,
     config_file: impl AsRef<Path>,
     report_path: impl AsRef<Path>,
-) -> bool {
+) -> Result<bool, Error> {
     let config: ConfigurationFile =
         serde_yaml::from_reader(File::open(config_file).expect("Could not open config file"))
             .expect("Could not parse config file");
-    let mut all_okay = true;
     let mut rule_results: Vec<report::RuleResult> = Vec::new();
 
-    config.rules.into_iter().for_each(|rule| {
+    let mut results = config.rules.into_iter().map(|rule| {
         let mut compare_results: Vec<FileCompareResult> = Vec::new();
         let okay = process_rule(
             nominal.as_ref(),
@@ -189,17 +202,28 @@ pub fn compare_folders(
             &mut compare_results,
         );
 
+        let rule_name = rule.name.as_str();
+
+        let result = match okay {
+            Ok(result) => result,
+            Err(e) => {
+                println!(
+                    "Error occured during rule-processing for rule {}: {}",
+                    rule_name, e
+                );
+                false
+            }
+        };
         rule_results.push(report::RuleResult {
             rule,
             compare_results,
         });
 
-        all_okay &= okay;
+        result
     });
-
-    report::create(&rule_results, report_path);
-
-    all_okay
+    let all_okay = results.all(|result| result);
+    report::create(&rule_results, report_path)?;
+    Ok(all_okay)
 }
 
 /// Create the jsonschema for the current configuration file format
@@ -221,7 +245,7 @@ mod tests {
             pattern_exclude: None,
         };
         let mut result = Vec::new();
-        assert!(!process_rule("NOT_EXISTING", ".", &rule, &mut result));
-        assert!(!process_rule(".", "NOT_EXISTING", &rule, &mut result));
+        assert!(!process_rule("NOT_EXISTING", ".", &rule, &mut result).unwrap());
+        assert!(!process_rule(".", "NOT_EXISTING", &rule, &mut result).unwrap());
     }
 }

@@ -1,6 +1,7 @@
 mod template;
 
 use crate::csv::{DiffType, Position, Table};
+use crate::Error;
 use serde::Serialize;
 use std::fs;
 use std::fs::File;
@@ -34,10 +35,7 @@ pub fn create_sub_folder(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
 ) -> PathBuf {
-    let mut joined_file_names = nominal
-        .as_ref()
-        .to_string_lossy()
-        .to_string();
+    let mut joined_file_names = nominal.as_ref().to_string_lossy().to_string();
 
     joined_file_names.push_str(actual.as_ref().to_string_lossy().to_string().as_str());
     joined_file_names.push_str(rule_name);
@@ -359,7 +357,10 @@ pub fn write_pdf_detail(
     result
 }
 
-pub(crate) fn create(rule_results: &[RuleResult], report_path: impl AsRef<Path>) {
+pub(crate) fn create(
+    rule_results: &[RuleResult],
+    report_path: impl AsRef<Path>,
+) -> Result<(), Error> {
     let report_dir = report_path.as_ref();
     if report_dir.is_dir() {
         info!("Delete report folder");
@@ -380,7 +381,7 @@ pub(crate) fn create(rule_results: &[RuleResult], report_path: impl AsRef<Path>)
                 let target = &sub_folder.join(detail);
                 info!("moving subfolder {:?} to {:?}", &detail, &target);
 
-                let files = crate::glob_files(detail, Some("*"));
+                let files = crate::glob_files(detail, Some("*"))?;
                 files.iter().for_each(|file| {
                     if let Some(file_name) = file.file_name() {
                         if !target.exists() || !target.is_dir() {
@@ -401,6 +402,7 @@ pub(crate) fn create(rule_results: &[RuleResult], report_path: impl AsRef<Path>)
     }
 
     write_index(report_dir, rule_results);
+    Ok(())
 }
 
 pub(crate) fn write_index(report_dir: impl AsRef<Path>, rule_results: &[RuleResult]) {

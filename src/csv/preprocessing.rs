@@ -1,5 +1,6 @@
 use crate::csv::value::Value;
 use crate::csv::Table;
+use crate::{csv, Error};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::Equal;
@@ -17,7 +18,7 @@ pub enum Preprocessor {
 }
 
 impl Preprocessor {
-    pub fn process(&self, table: &mut Table) {
+    pub fn process(&self, table: &mut Table) -> Result<(), csv::Error> {
         match self {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
@@ -30,8 +31,8 @@ impl Preprocessor {
     }
 }
 
-fn delete_row_by_regex(table: &mut Table, regex: &str) {
-    let regex = regex::Regex::new(regex).unwrap();
+fn delete_row_by_regex(table: &mut Table, regex: &str) -> Result<(), csv::Error> {
+    let regex = regex::Regex::new(regex)?;
     table
         .rows_mut()
         .filter(|row| row.iter().any(|v| regex.is_match(v.to_string().as_str())))
@@ -39,25 +40,19 @@ fn delete_row_by_regex(table: &mut Table, regex: &str) {
             row.iter_mut()
                 .for_each(|v| **v = Value::from_str("DELETED", &None))
         });
+    Ok(())
 }
 
-fn delete_row_by_number(table: &mut Table, id: usize) {
-    table
-        .rows_mut()
-        .nth(id)
-        .unwrap()
-        .iter_mut()
-        .for_each(|v| **v = Value::from_str("DELETED", &None));
+fn delete_row_by_number(table: &mut Table, id: usize) -> Result<(), csv::Error> {
+    table.rows_mut().nth(id).map(|mut v| {
+        v.iter_mut()
+            .for_each(|v| **v = Value::from_str("DELETED", &None))
+    });
+    Ok(())
 }
 
-fn get_permutation(rows_to_sort_by: &Vec<Value>) -> permutation::Permutation {
-    permutation::sort_by(rows_to_sort_by, |a, b| {
-        b.get_quantity()
-            .unwrap()
-            .value
-            .partial_cmp(&a.get_quantity().unwrap().value)
-            .unwrap_or(Equal)
-    })
+fn get_permutation(rows_to_sort_by: &Vec<f32>) -> permutation::Permutation {
+    permutation::sort_by(rows_to_sort_by, |a, b| b.partial_cmp(a).unwrap_or(Equal))
 }
 
 fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutation) {
@@ -66,42 +61,73 @@ fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutatio
     });
 }
 
-fn sort_by_column_id(table: &mut Table, id: usize) {
+fn sort_by_column_id(table: &mut Table, id: usize) -> Result<(), csv::Error> {
     let sort_master_col = table.columns.get(id).unwrap();
-    let permutation = get_permutation(&sort_master_col.rows);
+    let col_floats: Result<Vec<_>, csv::Error> = sort_master_col
+        .rows
+        .iter()
+        .map(|v| {
+            v.get_quantity()
+                .map(|q| q.value)
+                .ok_or(csv::Error::UnexpectedValue(
+                    v.clone(),
+                    "Expected quantity while trying to sort by column id".to_string(),
+                ))
+        })
+        .collect();
+    let permutation = get_permutation(&col_floats?);
     apply_permutation(table, permutation);
+    Ok(())
 }
 
-fn sort_by_column_name(table: &mut Table, name: &str) {
+fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
     let sort_master_col = table
         .columns
         .iter()
         .find(|c| c.header.as_deref().unwrap_or_default() == name)
         .unwrap();
-    let permutation = get_permutation(&sort_master_col.rows);
+    let col_floats: Result<Vec<_>, csv::Error> = sort_master_col
+        .rows
+        .iter()
+        .map(|v| {
+            v.get_quantity()
+                .map(|q| q.value)
+                .ok_or(csv::Error::UnexpectedValue(
+                    v.clone(),
+                    "Expected quantity while trying to sort by column name".to_string(),
+                ))
+        })
+        .collect();
+    let permutation = get_permutation(&col_floats?);
     apply_permutation(table, permutation);
+    Ok(())
 }
 
-fn delete_column_name(table: &mut Table, name: &str) {
+fn delete_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
     table
         .columns
         .retain(|col| col.header.as_deref().unwrap_or_default() != name);
+    Ok(())
 }
 
-fn delete_column_number(table: &mut Table, id: usize) {
+fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> {
     table.columns.remove(id);
+    Ok(())
 }
 
-fn extract_headers(table: &mut Table) {
+fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
     debug!("Extracting headers...");
-    table.columns.iter_mut().for_each(|col| {
-        let title = col.rows.drain(0..1).next().unwrap();
+    for col in table.columns.iter_mut() {
+        let title = col.rows.drain(0..1).next().ok_or(csv::Error::AccessError(
+            "Tried to extract header of empty column!".to_string(),
+        ))?;
         if let Value::String(title) = title {
             col.header = Some(title);
         } else {
             warn!("First entry in column was not a string!");
         }
-    });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
