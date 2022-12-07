@@ -26,17 +26,25 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error, info};
+use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
 /// Top-Level Error class for all errors that can happen during havocompare-running
 pub enum Error {
-    /// Attempted to glob an illegal pattern
     #[error("Failed to evaluate globbing pattern! {0}")]
     IllegalGlobbingPattern(#[from] glob::PatternError),
     #[error("Failed to compile regex! {0}")]
     RegexCompilationError(#[from] regex::Error),
     #[error("CSV module error")]
     CSVModuleError(#[from] csv::Error),
+    #[error("Error occurred during report creation {0}")]
+    ReportingError(#[from] report::Error),
+    #[error("Serde error, loading a yaml: {0}")]
+    SerdeYamlFail(#[from] serde_yaml::Error),
+    #[error("Serde error, writing json: {0}")]
+    SerdeJsonFail(#[from] serde_json::Error),
+    #[error("File access failed {0}")]
+    FileAccessError(#[from] FatIOError),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -68,7 +76,10 @@ struct Rule {
     file_type: ComparisonMode,
 }
 
-fn glob_files(path: impl AsRef<Path>, pattern: Option<&str>) -> Result<Vec<PathBuf>, Error> {
+fn glob_files(
+    path: impl AsRef<Path>,
+    pattern: Option<&str>,
+) -> Result<Vec<PathBuf>, glob::PatternError> {
     if let Some(pattern) = pattern {
         let path_prefix = path.as_ref().join(pattern);
         let path_pattern = path_prefix.to_string_lossy();
@@ -96,35 +107,45 @@ fn process_file(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-) -> FileCompareResult {
+) -> Result<FileCompareResult, Box<dyn std::error::Error>> {
     info!(
         "Processing files: {} vs {}...",
         nominal.as_ref().to_string_lossy(),
         actual.as_ref().to_string_lossy()
     );
 
-    let compare_result = match &rule.file_type {
-        ComparisonMode::CSV(conf) => {
-            csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-        }
-        ComparisonMode::Image(conf) => {
-            image::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-        }
-        ComparisonMode::PlainText(conf) => {
-            html::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-        }
-        ComparisonMode::Hash(conf) => {
-            hash::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-        }
-        ComparisonMode::PDFText(conf) => {
-            pdf::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-        }
-    };
+    let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> =
+        match &rule.file_type {
+            ComparisonMode::CSV(conf) => {
+                csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+                    .map_err(|e| e.into())
+            }
+            ComparisonMode::Image(conf) => {
+                image::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+                    .map_err(|e| e.into())
+            }
+            ComparisonMode::PlainText(conf) => {
+                html::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+                    .map_err(|e| e.into())
+            }
+            ComparisonMode::Hash(conf) => {
+                hash::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+                    .map_err(|e| e.into())
+            }
+            ComparisonMode::PDFText(conf) => {
+                pdf::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
+                    .map_err(|e| e.into())
+            }
+        };
 
-    if compare_result.is_error {
-        error!("Files didn't match");
+    if let Ok(compare_result) = &compare_result {
+        if compare_result.is_error {
+            error!("Files didn't match");
+        } else {
+            info!("Files matched");
+        }
     } else {
-        info!("Files matched!");
+        error!("Problem comparing the files");
     }
 
     compare_result
@@ -134,7 +155,7 @@ fn process_rule(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-    compare_results: &mut Vec<FileCompareResult>,
+    compare_results: &mut Vec<Result<FileCompareResult, Box<dyn std::error::Error>>>,
 ) -> Result<bool, Error> {
     info!("Processing rule: {}", rule.name.as_str());
     if !nominal.as_ref().is_dir() {
@@ -150,6 +171,14 @@ fn process_rule(
             actual.as_ref().to_string_lossy()
         );
         return Ok(false);
+    }
+    fn my_function(var: i32) -> i32 {
+        let maybe_doubled = if var > 0 {
+            2 * var
+        } else {
+            return -1;
+        };
+        maybe_doubled
     }
 
     let nominal_files_exclude = glob_files(nominal.as_ref(), rule.pattern_exclude.as_deref())?;
@@ -173,8 +202,7 @@ fn process_rule(
         .for_each(|(n, a)| {
             let compare_result = process_file(n, a, rule);
 
-            all_okay &= !compare_result.is_error;
-
+            all_okay &= compare_result.as_ref().map(|r| r.is_error).unwrap_or(false);
             compare_results.push(compare_result);
         });
 
@@ -188,13 +216,13 @@ pub fn compare_folders(
     config_file: impl AsRef<Path>,
     report_path: impl AsRef<Path>,
 ) -> Result<bool, Error> {
-    let config: ConfigurationFile =
-        serde_yaml::from_reader(File::open(config_file).expect("Could not open config file"))
-            .expect("Could not parse config file");
+    let config_reader = fat_io_wrap_std(config_file, &File::open)?;
+    let config: ConfigurationFile = serde_yaml::from_reader(config_reader)?;
     let mut rule_results: Vec<report::RuleResult> = Vec::new();
 
     let mut results = config.rules.into_iter().map(|rule| {
-        let mut compare_results: Vec<FileCompareResult> = Vec::new();
+        let mut compare_results: Vec<Result<FileCompareResult, Box<dyn std::error::Error>>> =
+            Vec::new();
         let okay = process_rule(
             nominal.as_ref(),
             actual.as_ref(),
@@ -216,7 +244,7 @@ pub fn compare_folders(
         };
         rule_results.push(report::RuleResult {
             rule,
-            compare_results,
+            compare_results: compare_results.into_iter().filter_map(|r| r.ok()).collect(),
         });
 
         result
@@ -227,9 +255,9 @@ pub fn compare_folders(
 }
 
 /// Create the jsonschema for the current configuration file format
-pub fn get_schema() -> String {
+pub fn get_schema() -> Result<String, Error> {
     let schema = schema_for!(ConfigurationFile);
-    serde_json::to_string_pretty(&schema).unwrap()
+    Ok(serde_json::to_string_pretty(&schema)?)
 }
 
 #[cfg(test)]

@@ -51,9 +51,7 @@ impl Display for Value {
 impl Value {
     fn get_numerical_value(field_split: &[&str]) -> Option<f32> {
         if field_split.len() == 1 || field_split.len() == 2 {
-            if let Ok(float_value) = field_split.first().unwrap().parse::<f32>() {
-                return Some(float_value);
-            }
+            return field_split.first().and_then(|s| s.parse::<f32>().ok());
         }
         None
     }

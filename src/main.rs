@@ -14,7 +14,7 @@ enum Commands {
         /// Actual data folder
         actual: String,
         /// Path to compare config YAML
-        compare_config: String,    
+        compare_config: String,
         /// Optional: Folder to store the report to, if not set the default location will be chosen.
         #[arg(short, long = "report_path", default_value_t = DEFAULT_REPORT_FOLDER.to_string())]
         report_config: String,
@@ -53,21 +53,21 @@ fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     match args.command {
         Commands::Schema => {
-            println!("{}", get_schema());
+            println!(
+                "{}",
+                get_schema().expect("Error occurred writing json schema")
+            );
             std::process::exit(0);
         }
-        Commands::Compare {            
+        Commands::Compare {
             compare_config,
             nominal,
             actual,
-            report_config
+            report_config,
         } => {
-            let result = havocompare::compare_folders(
-                nominal,
-                actual,
-                compare_config,
-                report_config,
-            );
+            let result =
+                havocompare::compare_folders(nominal, actual, compare_config, report_config)
+                    .unwrap_or(false);
             if result {
                 std::process::exit(0);
             } else {

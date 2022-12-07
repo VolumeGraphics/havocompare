@@ -19,6 +19,7 @@ use std::path::Path;
 use std::slice::{Iter, IterMut};
 use thiserror::Error;
 use tracing::{debug, error, info};
+use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
 /// Possible errors during csv parsing
@@ -27,6 +28,14 @@ pub enum Error {
     UnexpectedValue(Value, String),
     #[error("Tried accessing empty field")]
     AccessError(String),
+    #[error("Failed to compile regex {0}")]
+    RegexCompilationError(#[from] regex::Error),
+    #[error("Problem creating csv report {0}")]
+    ReportingError(#[from] report::Error),
+    #[error("File access failed {0}")]
+    FileAccessError(#[from] FatIOError),
+    #[error("IoError occured {0}")]
+    IoError(#[from] std::io::Error),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -68,7 +77,7 @@ impl Display for DiffType {
                     "Line: {}, Col: {} -- Different value types -- Expected {}, Found {}",
                     position.row, position.col, nominal, actual
                 )
-                .unwrap();
+                .unwrap_or_default();
             }
             DiffType::OutOfTolerance {
                 actual,
@@ -81,7 +90,7 @@ impl Display for DiffType {
                     "Line: {}, Col: {} -- Out of tolerance -- Expected {}, Found {}, Mode {}",
                     position.row, position.col, nominal, actual, mode
                 )
-                .unwrap();
+                .unwrap_or_default();
             }
             DiffType::UnequalStrings {
                 nominal,
@@ -93,7 +102,7 @@ impl Display for DiffType {
                     "Line: {}, Col: {} -- Different strings -- Expected {}, Found {}",
                     position.row, position.col, nominal, actual
                 )
-                .unwrap();
+                .unwrap_or_default();
             }
         };
         Ok(())
@@ -111,13 +120,13 @@ impl Display for Mode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             Mode::Absolute(tolerance) => {
-                write!(f, "Absolute (tol: {})", tolerance).unwrap();
+                write!(f, "Absolute (tol: {})", tolerance).unwrap_or_default();
             }
             Mode::Relative(tolerance) => {
-                write!(f, "Relative (tol: {})", tolerance).unwrap();
+                write!(f, "Relative (tol: {})", tolerance).unwrap_or_default();
             }
             Mode::Ignore => {
-                write!(f, "Ignored").unwrap();
+                write!(f, "Ignored").unwrap_or_default();
             }
         };
         Ok(())
@@ -200,10 +209,10 @@ pub struct Table {
 }
 
 impl Table {
-    pub fn from_reader<R: Read + Seek>(mut input: R, config: &Delimiters) -> Table {
+    pub fn from_reader<R: Read + Seek>(mut input: R, config: &Delimiters) -> Result<Table, Error> {
         let delimiters = match config.is_empty() {
             false => Cow::Borrowed(config),
-            true => Cow::Owned(guess_format_from_reader(&mut input)),
+            true => Cow::Owned(guess_format_from_reader(&mut input)?),
         };
         debug!("Final delimiters: {:?}", delimiters);
         let mut cols = Vec::new();
@@ -220,7 +229,7 @@ impl Table {
                 .for_each(|(f, col)| col.rows.push(f));
         });
 
-        Table { columns: cols }
+        Ok(Table { columns: cols })
     }
 
     pub fn rows(&self) -> RowIterator {
@@ -281,24 +290,25 @@ impl<'a> Iterator for RowIterator<'a> {
     }
 }
 
-pub fn compare_tables(nominal: &Table, actual: &Table, config: &CSVCompareConfig) -> Vec<DiffType> {
-    nominal
+pub fn compare_tables(
+    nominal: &Table,
+    actual: &Table,
+    config: &CSVCompareConfig,
+) -> Result<Vec<DiffType>, Error> {
+    let mut diffs = Vec::new();
+    for (col, (col_nom, col_act)) in nominal
         .columns
         .iter()
         .zip(actual.columns.iter())
         .enumerate()
-        .flat_map(|(col, (col_nom, col_act))| {
-            col_nom
-                .rows
-                .iter()
-                .zip(col_act.rows.iter())
-                .enumerate()
-                .flat_map(move |(row, (val_nom, val_act))| {
-                    let position = Position { row, col };
-                    compare_values(val_nom, val_act, config, position)
-                })
-        })
-        .collect()
+    {
+        for (row, (val_nom, val_act)) in col_nom.rows.iter().zip(col_act.rows.iter()).enumerate() {
+            let position = Position { row, col };
+            let diffs_field = compare_values(val_nom, val_act, config, position)?;
+            diffs.extend(diffs_field);
+        }
+    }
+    Ok(diffs)
 }
 
 fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
@@ -338,10 +348,10 @@ fn compare_values(
     actual: &Value,
     config: &CSVCompareConfig,
     position: Position,
-) -> Vec<DiffType> {
+) -> Result<Vec<DiffType>, Error> {
     // float quantity compare
     if let Some((actual_float, nominal_float)) = both_quantity(actual, nominal) {
-        config
+        Ok(config
             .comparison_modes
             .iter()
             .filter_map(|cm| {
@@ -356,29 +366,29 @@ fn compare_values(
                     None
                 }
             })
-            .collect()
+            .collect())
     } else if let Some((actual_string, nominal_string)) = both_string(actual, nominal) {
         if let Some(exclude_regex) = config.exclude_field_regex.as_deref() {
-            let regex = Regex::new(exclude_regex).expect("Specified exclusion regex invalid!");
+            let regex = Regex::new(exclude_regex)?;
             if regex.is_match(nominal_string.as_str()) {
-                return Vec::new();
+                return Ok(Vec::new());
             }
         }
         if nominal_string != actual_string {
-            vec![DiffType::UnequalStrings {
+            Ok(vec![DiffType::UnequalStrings {
                 position,
                 nominal: nominal_string,
                 actual: actual_string,
-            }]
+            }])
         } else {
-            Vec::new()
+            Ok(Vec::new())
         }
     } else {
-        vec![DiffType::DifferentValueTypes {
+        Ok(vec![DiffType::DifferentValueTypes {
             actual: actual.clone(),
             nominal: nominal.clone(),
             position,
-        }]
+        }])
     }
 }
 
@@ -386,18 +396,18 @@ fn get_diffs_readers<R: Read + Seek>(
     nominal: R,
     actual: R,
     config: &CSVCompareConfig,
-) -> (Table, Table, Vec<DiffType>) {
-    let mut nominal = Table::from_reader(nominal, &config.delimiters);
-    let mut actual = Table::from_reader(actual, &config.delimiters);
+) -> Result<(Table, Table, Vec<DiffType>), Error> {
+    let mut nominal = Table::from_reader(nominal, &config.delimiters)?;
+    let mut actual = Table::from_reader(actual, &config.delimiters)?;
     info!("Running preprocessing steps");
     if let Some(preprocessors) = config.preprocessing.as_ref() {
-        preprocessors.iter().for_each(|preprocessor| {
-            preprocessor.process(&mut nominal);
-            preprocessor.process(&mut actual);
-        });
+        for preprocessor in preprocessors.iter() {
+            preprocessor.process(&mut nominal)?;
+            preprocessor.process(&mut actual)?;
+        }
     }
-    let comparison_result = compare_tables(&nominal, &actual, config);
-    (nominal, actual, comparison_result)
+    let comparison_result = compare_tables(&nominal, &actual, config)?;
+    Ok((nominal, actual, comparison_result))
 }
 
 pub fn compare_paths(
@@ -405,40 +415,45 @@ pub fn compare_paths(
     actual: impl AsRef<Path>,
     config: &CSVCompareConfig,
     rule_name: &str,
-) -> report::FileCompareResult {
-    let nominal_file = File::open(nominal.as_ref()).expect("Could not open nominal file");
-    let actual_file = File::open(actual.as_ref()).expect("Could not open nominal file");
+) -> Result<report::FileCompareResult, Error> {
+    let nominal_file = fat_io_wrap_std(nominal.as_ref(), &File::open)?;
+    let actual_file = fat_io_wrap_std(actual.as_ref(), &File::open)?;
 
     let (nominal_table, actual_table, results) =
-        get_diffs_readers(&nominal_file, &actual_file, config);
+        get_diffs_readers(&nominal_file, &actual_file, config)?;
     results.iter().for_each(|error| {
         error!("{}", &error);
     });
 
-    report::write_csv_detail(
+    Ok(report::write_csv_detail(
         nominal_table,
         actual_table,
         nominal.as_ref(),
         actual.as_ref(),
         results.as_slice(),
         rule_name,
-    )
+    )?)
 }
 
 fn guess_format_from_line(
     line: &str,
     field_separator_hint: Option<char>,
-) -> (Option<char>, Option<char>) {
+) -> Result<(Option<char>, Option<char>), Error> {
     let mut field_separator = field_separator_hint;
 
     if field_separator.is_none() {
         if line.find(';').is_some() {
             field_separator = Some(';');
         } else {
-            let field_sep_regex = Regex::new(r"\w([,|])[\W\w]").unwrap();
+            let field_sep_regex = Regex::new(r"\w([,|])[\W\w]")?;
             let capture = field_sep_regex.captures_iter(line).next();
             if let Some(cap) = capture {
-                field_separator = Some(cap[1].chars().next().unwrap());
+                field_separator = Some(cap[1].chars().next().ok_or_else(|| {
+                    Error::AccessError(format!(
+                        "Could not capture field separator for guessing from '{}'",
+                        line
+                    ))
+                })?);
             }
         }
     }
@@ -458,11 +473,16 @@ fn guess_format_from_line(
         "Regex for decimal sep: '{}'",
         decimal_separator_regex_string.as_str()
     );
-    let decimal_separator_regex = Regex::new(decimal_separator_regex_string.as_str()).unwrap();
+    let decimal_separator_regex = Regex::new(decimal_separator_regex_string.as_str())?;
     let mut separators: HashMap<char, usize> = HashMap::new();
 
     for capture in decimal_separator_regex.captures_iter(line) {
-        let sep = capture[1].chars().next().unwrap();
+        let sep = capture[1].chars().next().ok_or_else(|| {
+            Error::AccessError(format!(
+                "Could not capture decimal separator for guessing from '{}'",
+                line
+            ))
+        })?;
         if let Some(entry) = separators.get_mut(&sep) {
             *entry += 1;
         } else {
@@ -481,24 +501,24 @@ fn guess_format_from_line(
         .map(|s| s.0.to_owned())
         .next();
 
-    (field_separator, decimal_separator)
+    Ok((field_separator, decimal_separator))
 }
 
-fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Delimiters {
+fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Result<Delimiters, Error> {
     let mut format = (None, None);
 
     let bufreader = BufReader::new(&mut input);
     debug!("Guessing format from reader...");
     for line in bufreader.lines().filter_map(|l| l.ok()) {
         debug!("Guessing format from line: '{}'", line.as_str());
-        format = guess_format_from_line(line.as_str(), format.0);
+        format = guess_format_from_line(line.as_str(), format.0)?;
         debug!("Current format: {:?}", format);
         if format.0.is_some() && format.1.is_some() {
             break;
         }
     }
 
-    input.rewind().expect("Could not rewind the file");
+    input.rewind()?;
 
     let delim = Delimiters {
         field_delimiter: format.0,
@@ -508,7 +528,7 @@ fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Delimiters {
         "Inferring of csv delimiters resulted in decimal separators: '{:?}', field delimiter: '{:?}'",
         delim.decimal_separator, delim.field_delimiter
     );
-    delim
+    Ok(delim)
 }
 
 #[cfg(test)]
@@ -610,7 +630,7 @@ mod tests {
         let actual = File::open("tests/csv/data/Annotations.csv").unwrap();
         let nominal = File::open("tests/csv/data/Annotations.csv").unwrap();
 
-        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config).unwrap();
         assert!(diff.is_empty());
     }
 
@@ -662,7 +682,7 @@ mod tests {
         let actual = File::open("tests/csv/data/DeviationHistogram.csv").unwrap();
         let nominal = File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap();
 
-        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config).unwrap();
         assert_eq!(diff.len(), 1);
         let first_diff = diff.first().unwrap();
         if let DifferentValueTypes {
@@ -690,7 +710,7 @@ mod tests {
         let actual = File::open("tests/csv/data/DeviationHistogram.csv").unwrap();
         let nominal = File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap();
 
-        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config).unwrap();
         // the different value type is still there, but we have 2 diffs over 0.5
         assert_eq!(diff.len(), 3);
     }
@@ -730,7 +750,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config).unwrap();
         // the different value type is still there, but we have 2 diffs over 0.5
         assert_eq!(diff.len(), 0);
     }
@@ -747,7 +767,7 @@ mod tests {
         let actual = File::open("tests/csv/data/DeviationHistogram.csv").unwrap();
         let nominal = File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap();
 
-        let (_, _, diff) = get_diffs_readers(nominal, actual, &config);
+        let (_, _, diff) = get_diffs_readers(nominal, actual, &config).unwrap();
         // the different value type is still there, but we have 5 rel diffs over 0.1
         assert_eq!(diff.len(), 6);
     }
@@ -980,7 +1000,7 @@ mod tests {
             comparison_modes: vec![Mode::Absolute(0.0)],
         };
         let (_, _, res) =
-            get_diffs_readers(Cursor::new(str_with_bom), Cursor::new(str_no_bom), &cfg);
+            get_diffs_readers(Cursor::new(str_with_bom), Cursor::new(str_no_bom), &cfg).unwrap();
         assert!(res.is_empty());
     }
 

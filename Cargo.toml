@@ -34,6 +34,7 @@ sha2 = "0.10.6"
 data-encoding = "2.3.2"
 permutation = "0.4.1"
 pdf-extract = "0.6.4"
+vg_errortools = "0.1.0"
 
 [target.'cfg(windows)'.dependencies]
 ansi_term = "0.12"
