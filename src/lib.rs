@@ -31,18 +31,25 @@ use vg_errortools::{fat_io_wrap_std, FatIOError};
 #[derive(Error, Debug)]
 /// Top-Level Error class for all errors that can happen during havocompare-running
 pub enum Error {
+    /// Pattern used for globbing was invalid
     #[error("Failed to evaluate globbing pattern! {0}")]
     IllegalGlobbingPattern(#[from] glob::PatternError),
+    /// Regex pattern requested could not be compiled
     #[error("Failed to compile regex! {0}")]
     RegexCompilationError(#[from] regex::Error),
+    /// An error occured in the csv rule checker
     #[error("CSV module error")]
     CSVModuleError(#[from] csv::Error),
+    /// An error occured in the reporting module
     #[error("Error occurred during report creation {0}")]
     ReportingError(#[from] report::Error),
+    /// An error occurred during reading yaml
     #[error("Serde error, loading a yaml: {0}")]
     SerdeYamlFail(#[from] serde_yaml::Error),
+    /// An error occurred during writing json
     #[error("Serde error, writing json: {0}")]
     SerdeJsonFail(#[from] serde_json::Error),
+    /// A problem happened while accessing a file
     #[error("File access failed {0}")]
     FileAccessError(#[from] FatIOError),
 }
@@ -194,7 +201,10 @@ fn process_rule(
         .for_each(|(n, a)| {
             let compare_result = process_file(n, a, rule);
 
-            all_okay &= compare_result.as_ref().map(|r| r.is_error).unwrap_or(false);
+            all_okay &= compare_result
+                .as_ref()
+                .map(|r| !r.is_error)
+                .unwrap_or(false);
             compare_results.push(compare_result);
         });
 

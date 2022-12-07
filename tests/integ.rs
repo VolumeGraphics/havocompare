@@ -5,8 +5,8 @@ use test_log::test;
 fn simple_test_identity() {
     let report_dir = tempdir::TempDir::new("hvc_testing")
         .expect("Could not generate temporary directory for report");
-
-    assert!(compare_folders("tests/", "tests/", "tests/integ/config.yml", report_dir).unwrap());
+    let result = compare_folders("tests/", "tests/", "tests/integ/config.yml", report_dir);
+    assert!(result.unwrap());
 }
 
 #[test]
