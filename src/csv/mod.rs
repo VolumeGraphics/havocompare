@@ -605,7 +605,8 @@ mod tests {
         let table = Table::from_reader(
             File::open("tests/csv/data/Annotations.csv").unwrap(),
             &Delimiters::default(),
-        );
+        )
+        .unwrap();
         assert_eq!(table.columns.len(), 13);
     }
 
@@ -614,7 +615,8 @@ mod tests {
         let table = Table::from_reader(
             File::open("tests/csv/data/Annotations.csv").unwrap(),
             &Delimiters::default(),
-        );
+        )
+        .unwrap();
         assert_eq!(table.rows().len(), 7);
     }
 
@@ -646,13 +648,15 @@ mod tests {
         let actual = Table::from_reader(
             File::open("tests/csv/data/DeviationHistogram.csv").unwrap(),
             &config.delimiters,
-        );
+        )
+        .unwrap();
         let nominal = Table::from_reader(
             File::open("tests/csv/data/DeviationHistogram_diff.csv").unwrap(),
             &config.delimiters,
-        );
+        )
+        .unwrap();
 
-        let diff = compare_tables(&nominal, &actual, &config);
+        let diff = compare_tables(&nominal, &actual, &config).unwrap();
         assert_eq!(diff.len(), 1);
         let first_diff = diff.first().unwrap();
         if let DifferentValueTypes {
@@ -842,26 +846,30 @@ mod tests {
         let format = guess_format_from_line(
             "-0.969654597744788,-0.215275534510198,0.115869999295192,7.04555232210696",
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(format, (Some(','), Some('.')));
 
         let format = guess_format_from_line(
             "-0.969654597744788;-0.215275534510198;0.115869999295192;7.04555232210696",
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(format, (Some(';'), Some('.')));
 
         let format = guess_format_from_line(
             "-0.969654597744788,-0.215275534510198,0.115869999295192,7.04555232210696",
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(format, (Some(','), Some('.')));
     }
 
     #[test]
     fn format_detection_from_file() {
         let format =
-            guess_format_from_reader(&mut File::open("tests/csv/data/Annotations.csv").unwrap());
+            guess_format_from_reader(&mut File::open("tests/csv/data/Annotations.csv").unwrap())
+                .unwrap();
         assert_eq!(
             format,
             Delimiters {
@@ -875,7 +883,8 @@ mod tests {
     fn format_detection_from_file_metrology_special() {
         let format = guess_format_from_reader(
             &mut File::open("tests/csv/data/Multi_Apply_Rotation.csv").unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             format,
             Delimiters {
@@ -889,7 +898,8 @@ mod tests {
     fn format_detection_from_file_metrology_other_special() {
         let format = guess_format_from_reader(
             &mut File::open("tests/csv/data/CM_quality_threshold.csv").unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             format,
             Delimiters {
@@ -903,7 +913,8 @@ mod tests {
     fn format_detection_from_file_analysis_pia_table() {
         let format = guess_format_from_reader(
             &mut File::open("tests/csv/data/easy_pore_export_annoration_table_result.csv").unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             format,
             Delimiters {
@@ -916,7 +927,8 @@ mod tests {
     #[test]
     fn format_detection_from_file_no_field_sep() {
         let format =
-            guess_format_from_reader(&mut File::open("tests/csv/data/no_field_sep.csv").unwrap());
+            guess_format_from_reader(&mut File::open("tests/csv/data/no_field_sep.csv").unwrap())
+                .unwrap();
         assert_eq!(
             format,
             Delimiters {
@@ -932,7 +944,8 @@ mod tests {
                 "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
             )
             .unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             format,
             Delimiters {
@@ -949,7 +962,8 @@ mod tests {
                 "tests/integ/data/display_of_status_message_in_cm_tables/actual/Volume1.csv",
             )
             .unwrap(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             format,
             Delimiters {

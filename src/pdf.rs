@@ -89,7 +89,8 @@ mod test {
             "tests/pdf/actual.pdf",
             &HTMLCompareConfig::default(),
             "",
-        );
+        )
+        .unwrap();
         assert!(!result.is_error);
     }
 

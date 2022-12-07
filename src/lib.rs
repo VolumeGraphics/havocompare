@@ -172,14 +172,6 @@ fn process_rule(
         );
         return Ok(false);
     }
-    fn my_function(var: i32) -> i32 {
-        let maybe_doubled = if var > 0 {
-            2 * var
-        } else {
-            return -1;
-        };
-        maybe_doubled
-    }
 
     let nominal_files_exclude = glob_files(nominal.as_ref(), rule.pattern_exclude.as_deref())?;
     let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), Some(rule.pattern_include.as_str()))?;

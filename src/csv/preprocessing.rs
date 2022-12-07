@@ -152,12 +152,13 @@ mod tests {
             File::open("tests/csv/data/DeviationHistogram.csv").unwrap(),
             &delimiters,
         )
+        .unwrap()
     }
 
     #[test]
     fn test_extract_headers() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
+        extract_headers(&mut table).unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Deviation [mm]"
@@ -171,8 +172,8 @@ mod tests {
     #[test]
     fn test_delete_column_by_id() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
-        delete_column_number(&mut table, 0);
+        extract_headers(&mut table).unwrap();
+        delete_column_number(&mut table, 0).unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Surface [mm²]"
@@ -182,8 +183,8 @@ mod tests {
     #[test]
     fn test_delete_column_by_name() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
-        delete_column_name(&mut table, "Surface [mm²]");
+        extract_headers(&mut table).unwrap();
+        delete_column_name(&mut table, "Surface [mm²]").unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Deviation [mm]"
@@ -193,7 +194,7 @@ mod tests {
     #[test]
     fn test_delete_row_by_id() {
         let mut table = setup_table(None);
-        delete_row_by_number(&mut table, 0);
+        delete_row_by_number(&mut table, 0).unwrap();
         assert_eq!(
             table
                 .columns
@@ -212,7 +213,7 @@ mod tests {
     #[test]
     fn test_delete_row_by_regex() {
         let mut table = setup_table(None);
-        delete_row_by_regex(&mut table, "mm");
+        delete_row_by_regex(&mut table, "mm").unwrap();
         assert_eq!(
             table
                 .columns
@@ -231,8 +232,8 @@ mod tests {
     #[test]
     fn test_sort_by_name() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
-        sort_by_column_name(&mut table, "Surface [mm²]");
+        extract_headers(&mut table).unwrap();
+        sort_by_column_name(&mut table, "Surface [mm²]").unwrap();
         let mut peekable_rows = table.rows().peekable();
         while let Some(row) = peekable_rows.next() {
             if let Some(next_row) = peekable_rows.peek() {
@@ -247,9 +248,9 @@ mod tests {
     #[test]
     fn test_sort_by_id() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
+        extract_headers(&mut table).unwrap();
         let column = 1;
-        sort_by_column_id(&mut table, column);
+        sort_by_column_id(&mut table, column).unwrap();
         let mut peekable_rows = table.rows().peekable();
         while let Some(row) = peekable_rows.next() {
             if let Some(next_row) = peekable_rows.peek() {
