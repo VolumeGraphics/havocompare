@@ -141,8 +141,6 @@ fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::csv::{Column, Delimiters, Error};

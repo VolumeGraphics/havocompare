@@ -532,8 +532,6 @@ fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Result<Delimit
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::csv::DiffType::{DifferentValueTypes, OutOfTolerance, UnequalStrings};

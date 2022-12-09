@@ -11,11 +11,11 @@ use vg_errortools::FatIOError;
 /// Errors during html / plain text checking
 pub enum Error {
     #[error("Failed to compile regex {0}")]
-    RegexCompilationError(#[from] regex::Error),
+    RegexCompilationFailure(#[from] regex::Error),
     #[error("Problem creating hash report {0}")]
-    ReportingError(#[from] report::Error),
+    ReportingFailure(#[from] report::Error),
     #[error("File access failed {0}")]
-    FileAccessError(#[from] FatIOError),
+    FileAccessProblem(#[from] FatIOError),
     #[error("PDF text extraction error {0}")]
     PdfTextExtractionFailed(#[from] pdf_extract::OutputError),
 }
@@ -70,8 +70,6 @@ pub fn compare_files<P: AsRef<Path>>(
 }
 
 #[cfg(test)]
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
 mod test {
     use super::*;
 
