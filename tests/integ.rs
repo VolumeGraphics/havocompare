@@ -5,13 +5,8 @@ use test_log::test;
 fn simple_test_identity() {
     let report_dir = tempdir::TempDir::new("hvc_testing")
         .expect("Could not generate temporary directory for report");
-
-    assert!(compare_folders(
-        "tests/",
-        "tests/",
-        "tests/integ/config.yml",
-        report_dir
-    ));
+    let result = compare_folders("tests/", "tests/", "tests/integ/config.yml", report_dir);
+    assert!(result.unwrap());
 }
 
 #[test]
@@ -24,7 +19,8 @@ fn display_of_status_message_in_cm_tables() {
         "tests/integ/data/display_of_status_message_in_cm_tables/actual/",
         "tests/integ/vgrf.yml",
         report_dir
-    ));
+    )
+    .unwrap());
 }
 
 #[test]
@@ -37,5 +33,6 @@ fn images_test() {
         "tests/integ/data/images/actual/",
         "tests/integ/jpg_compare.yml",
         report_dir
-    ));
+    )
+    .unwrap());
 }

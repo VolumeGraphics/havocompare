@@ -1,3 +1,4 @@
+use crate::csv;
 use crate::csv::value::Value;
 use crate::csv::Table;
 use schemars_derive::JsonSchema;
@@ -17,7 +18,7 @@ pub enum Preprocessor {
 }
 
 impl Preprocessor {
-    pub fn process(&self, table: &mut Table) {
+    pub fn process(&self, table: &mut Table) -> Result<(), csv::Error> {
         match self {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
@@ -30,8 +31,8 @@ impl Preprocessor {
     }
 }
 
-fn delete_row_by_regex(table: &mut Table, regex: &str) {
-    let regex = regex::Regex::new(regex).unwrap();
+fn delete_row_by_regex(table: &mut Table, regex: &str) -> Result<(), csv::Error> {
+    let regex = regex::Regex::new(regex)?;
     table
         .rows_mut()
         .filter(|row| row.iter().any(|v| regex.is_match(v.to_string().as_str())))
@@ -39,25 +40,19 @@ fn delete_row_by_regex(table: &mut Table, regex: &str) {
             row.iter_mut()
                 .for_each(|v| **v = Value::from_str("DELETED", &None))
         });
+    Ok(())
 }
 
-fn delete_row_by_number(table: &mut Table, id: usize) {
-    table
-        .rows_mut()
-        .nth(id)
-        .unwrap()
-        .iter_mut()
-        .for_each(|v| **v = Value::from_str("DELETED", &None));
+fn delete_row_by_number(table: &mut Table, id: usize) -> Result<(), csv::Error> {
+    if let Some(mut v) = table.rows_mut().nth(id) {
+        v.iter_mut()
+            .for_each(|v| **v = Value::from_str("DELETED", &None))
+    }
+    Ok(())
 }
 
-fn get_permutation(rows_to_sort_by: &Vec<Value>) -> permutation::Permutation {
-    permutation::sort_by(rows_to_sort_by, |a, b| {
-        b.get_quantity()
-            .unwrap()
-            .value
-            .partial_cmp(&a.get_quantity().unwrap().value)
-            .unwrap_or(Equal)
-    })
+fn get_permutation(rows_to_sort_by: &Vec<f32>) -> permutation::Permutation {
+    permutation::sort_by(rows_to_sort_by, |a, b| b.partial_cmp(a).unwrap_or(Equal))
 }
 
 fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutation) {
@@ -66,48 +61,91 @@ fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutatio
     });
 }
 
-fn sort_by_column_id(table: &mut Table, id: usize) {
-    let sort_master_col = table.columns.get(id).unwrap();
-    let permutation = get_permutation(&sort_master_col.rows);
+fn sort_by_column_id(table: &mut Table, id: usize) -> Result<(), csv::Error> {
+    let sort_master_col = table.columns.get(id).ok_or_else(|| {
+        csv::Error::InvalidAccess(format!(
+            "Column number sorting by id {} requested but column not found.",
+            id
+        ))
+    })?;
+    let col_floats: Result<Vec<_>, csv::Error> = sort_master_col
+        .rows
+        .iter()
+        .map(|v| {
+            v.get_quantity().map(|q| q.value).ok_or_else(|| {
+                csv::Error::UnexpectedValue(
+                    v.clone(),
+                    "Expected quantity while trying to sort by column id".to_string(),
+                )
+            })
+        })
+        .collect();
+    let permutation = get_permutation(&col_floats?);
     apply_permutation(table, permutation);
+    Ok(())
 }
 
-fn sort_by_column_name(table: &mut Table, name: &str) {
+fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
     let sort_master_col = table
         .columns
         .iter()
         .find(|c| c.header.as_deref().unwrap_or_default() == name)
-        .unwrap();
-    let permutation = get_permutation(&sort_master_col.rows);
+        .ok_or_else(|| {
+            csv::Error::InvalidAccess(format!(
+                "Requested format sorting by column'{}' but column not found.",
+                name
+            ))
+        })?;
+    let col_floats: Result<Vec<_>, csv::Error> = sort_master_col
+        .rows
+        .iter()
+        .map(|v| {
+            v.get_quantity().map(|q| q.value).ok_or_else(|| {
+                csv::Error::UnexpectedValue(
+                    v.clone(),
+                    "Expected quantity while trying to sort by column name".to_string(),
+                )
+            })
+        })
+        .collect();
+    let permutation = get_permutation(&col_floats?);
     apply_permutation(table, permutation);
+    Ok(())
 }
 
-fn delete_column_name(table: &mut Table, name: &str) {
+fn delete_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
     table
         .columns
         .retain(|col| col.header.as_deref().unwrap_or_default() != name);
+    Ok(())
 }
 
-fn delete_column_number(table: &mut Table, id: usize) {
+fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> {
     table.columns.remove(id);
+    Ok(())
 }
 
-fn extract_headers(table: &mut Table) {
+fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
     debug!("Extracting headers...");
-    table.columns.iter_mut().for_each(|col| {
-        let title = col.rows.drain(0..1).next().unwrap();
+    for col in table.columns.iter_mut() {
+        let title = col.rows.drain(0..1).next().ok_or_else(|| {
+            csv::Error::InvalidAccess("Tried to extract header of empty column!".to_string())
+        })?;
         if let Value::String(title) = title {
             col.header = Some(title);
         } else {
             warn!("First entry in column was not a string!");
         }
-    });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::csv::Delimiters;
+    use crate::csv::{Column, Delimiters, Error};
     use std::fs::File;
 
     fn setup_table(delimiters: Option<Delimiters>) -> Table {
@@ -116,12 +154,13 @@ mod tests {
             File::open("tests/csv/data/DeviationHistogram.csv").unwrap(),
             &delimiters,
         )
+        .unwrap()
     }
 
     #[test]
     fn test_extract_headers() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
+        extract_headers(&mut table).unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Deviation [mm]"
@@ -135,8 +174,8 @@ mod tests {
     #[test]
     fn test_delete_column_by_id() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
-        delete_column_number(&mut table, 0);
+        extract_headers(&mut table).unwrap();
+        delete_column_number(&mut table, 0).unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Surface [mm²]"
@@ -146,8 +185,8 @@ mod tests {
     #[test]
     fn test_delete_column_by_name() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
-        delete_column_name(&mut table, "Surface [mm²]");
+        extract_headers(&mut table).unwrap();
+        delete_column_name(&mut table, "Surface [mm²]").unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "Deviation [mm]"
@@ -157,7 +196,7 @@ mod tests {
     #[test]
     fn test_delete_row_by_id() {
         let mut table = setup_table(None);
-        delete_row_by_number(&mut table, 0);
+        delete_row_by_number(&mut table, 0).unwrap();
         assert_eq!(
             table
                 .columns
@@ -176,7 +215,7 @@ mod tests {
     #[test]
     fn test_delete_row_by_regex() {
         let mut table = setup_table(None);
-        delete_row_by_regex(&mut table, "mm");
+        delete_row_by_regex(&mut table, "mm").unwrap();
         assert_eq!(
             table
                 .columns
@@ -195,8 +234,8 @@ mod tests {
     #[test]
     fn test_sort_by_name() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
-        sort_by_column_name(&mut table, "Surface [mm²]");
+        extract_headers(&mut table).unwrap();
+        sort_by_column_name(&mut table, "Surface [mm²]").unwrap();
         let mut peekable_rows = table.rows().peekable();
         while let Some(row) = peekable_rows.next() {
             if let Some(next_row) = peekable_rows.peek() {
@@ -211,9 +250,9 @@ mod tests {
     #[test]
     fn test_sort_by_id() {
         let mut table = setup_table(None);
-        extract_headers(&mut table);
+        extract_headers(&mut table).unwrap();
         let column = 1;
-        sort_by_column_id(&mut table, column);
+        sort_by_column_id(&mut table, column).unwrap();
         let mut peekable_rows = table.rows().peekable();
         while let Some(row) = peekable_rows.next() {
             if let Some(next_row) = peekable_rows.peek() {
@@ -223,5 +262,43 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn sorting_by_mixed_column_fails() {
+        let column = Column {
+            header: Some("Field".to_string()),
+            rows: vec![
+                Value::from_str("1.0", &None),
+                Value::String("String-Value".to_string()),
+            ],
+        };
+        let mut table = Table {
+            columns: vec![column],
+        };
+        let order_by_name = sort_by_column_name(&mut table, "Field");
+        assert!(matches!(
+            order_by_name.unwrap_err(),
+            Error::UnexpectedValue(_, _)
+        ));
+
+        let order_by_id = sort_by_column_id(&mut table, 0);
+        assert!(matches!(
+            order_by_id.unwrap_err(),
+            Error::UnexpectedValue(_, _)
+        ));
+    }
+
+    #[test]
+    fn non_existing_table_fails() {
+        let mut table = setup_table(None);
+        let order_by_name = sort_by_column_name(&mut table, "Non-Existing-Field");
+        assert!(matches!(
+            order_by_name.unwrap_err(),
+            Error::InvalidAccess(_)
+        ));
+
+        let order_by_id = sort_by_column_id(&mut table, 999);
+        assert!(matches!(order_by_id.unwrap_err(), Error::InvalidAccess(_)));
     }
 }

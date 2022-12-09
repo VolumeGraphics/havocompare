@@ -4,15 +4,29 @@ use data_encoding::HEXLOWER;
 use schemars_derive::JsonSchema;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use thiserror::Error;
+use vg_errortools::fat_io_wrap_std;
+use vg_errortools::FatIOError;
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub enum HashFunction {
     Sha256,
 }
 
+#[derive(Debug, Error)]
+/// Errors during hash checking
+pub enum Error {
+    #[error("Failed to compile regex {0}")]
+    RegexCompilationError(#[from] regex::Error),
+    #[error("Problem creating hash report {0}")]
+    ReportingError(#[from] report::Error),
+    #[error("File access failed {0}")]
+    FileAccessError(#[from] FatIOError),
+}
+
 impl HashFunction {
-    fn hash_file(&self, mut file: impl Read) -> [u8; 32] {
+    fn hash_file(&self, mut file: impl Read) -> Result<[u8; 32], Error> {
         match self {
             Self::Sha256 => {
                 use sha2::{Digest, Sha256};
@@ -20,9 +34,10 @@ impl HashFunction {
 
                 let mut hasher = Sha256::new();
 
-                let _ = io::copy(&mut file, &mut hasher).expect("Could not open file to hash");
+                let _ = io::copy(&mut file, &mut hasher)
+                    .map_err(|e| FatIOError::from_std_io_err(e, PathBuf::new()))?;
                 let hash_bytes = hasher.finalize();
-                hash_bytes.into()
+                Ok(hash_bytes.into())
             }
         }
     }
@@ -46,13 +61,13 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     config: &HashConfig,
     rule_name: &str,
-) -> report::FileCompareResult {
-    let act = config.function.hash_file(
-        File::open(actual_path.as_ref()).expect("Could not open actual file for hashing"),
-    );
-    let nom = config.function.hash_file(
-        File::open(nominal_path.as_ref()).expect("Could not open actual file for hashing"),
-    );
+) -> Result<report::FileCompareResult, Error> {
+    let act = config
+        .function
+        .hash_file(fat_io_wrap_std(actual_path.as_ref(), &File::open)?)?;
+    let nom = config
+        .function
+        .hash_file(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?)?;
 
     let diff = if act != nom {
         vec![format!(
@@ -64,7 +79,12 @@ pub fn compare_files<P: AsRef<Path>>(
         vec![]
     };
 
-    report::write_html_detail(nominal_path, actual_path, diff.as_slice(), rule_name)
+    Ok(report::write_html_detail(
+        nominal_path,
+        actual_path,
+        diff.as_slice(),
+        rule_name,
+    )?)
 }
 
 #[cfg(test)]
@@ -74,22 +94,28 @@ mod test {
 
     #[test]
     fn identity() {
-        let f1 = Sha256.hash_file(File::open("tests/integ.rs").unwrap());
-        let f2 = Sha256.hash_file(File::open("tests/integ.rs").unwrap());
+        let f1 = Sha256
+            .hash_file(File::open("tests/integ.rs").unwrap())
+            .unwrap();
+        let f2 = Sha256
+            .hash_file(File::open("tests/integ.rs").unwrap())
+            .unwrap();
         assert_eq!(f1, f2);
     }
 
     #[test]
     fn hash_pinning() {
         let sum = "bc3abb411d305c4436185c474be3db2608e910612a573f6791b143d7d749b699";
-        let f1 = Sha256.hash_file(File::open("tests/integ/data/images/diff_100_DPI.png").unwrap());
+        let f1 = Sha256
+            .hash_file(File::open("tests/integ/data/images/diff_100_DPI.png").unwrap())
+            .unwrap();
         assert_eq!(HEXLOWER.encode(&f1), sum);
     }
 
     #[test]
     fn identity_outer() {
         let file = "tests/integ.rs";
-        let result = compare_files(file, file, &HashConfig::default(), "test");
+        let result = compare_files(file, file, &HashConfig::default(), "test").unwrap();
         assert!(!result.is_error);
     }
 
@@ -98,7 +124,7 @@ mod test {
         let file_act = "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg";
         let file_nominal = "tests/integ/data/images/expected/SaveImage_100DPI_default_size.jpg";
 
-        let result = compare_files(file_act, file_nominal, &HashConfig::default(), "test");
+        let result = compare_files(file_act, file_nominal, &HashConfig::default(), "test").unwrap();
         assert!(result.is_error);
     }
 }

@@ -6,12 +6,29 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use strsim::normalized_damerau_levenshtein;
+use thiserror::Error;
 use tracing::error;
+use vg_errortools::fat_io_wrap_std;
+use vg_errortools::FatIOError;
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct HTMLCompareConfig {
-    threshold: f64,
-    ignore_lines: Option<Vec<String>>,
+    pub threshold: f64,
+    pub ignore_lines: Option<Vec<String>>,
+}
+
+impl HTMLCompareConfig {
+    pub fn get_ignore_list(&self) -> Result<Vec<Regex>, regex::Error> {
+        let exclusion_list: Option<Result<Vec<_>, regex::Error>> = self
+            .ignore_lines
+            .as_ref()
+            .map(|v| v.iter().map(|exc| Regex::new(exc)).collect());
+        let exclusion_list = match exclusion_list {
+            Some(r) => r?,
+            None => Vec::new(),
+        };
+        Ok(exclusion_list)
+    }
 }
 
 impl Default for HTMLCompareConfig {
@@ -23,28 +40,29 @@ impl Default for HTMLCompareConfig {
     }
 }
 
+#[derive(Debug, Error)]
+/// Errors during html / plain text checking
+pub enum Error {
+    #[error("Failed to compile regex {0}")]
+    RegexCompilationError(#[from] regex::Error),
+    #[error("Problem creating hash report {0}")]
+    ReportingError(#[from] report::Error),
+    #[error("File access failed {0}")]
+    FileAccessError(#[from] FatIOError),
+}
+
 pub fn compare_files<P: AsRef<Path>>(
     actual_path: P,
     nominal_path: P,
     config: &HTMLCompareConfig,
     rule_name: &str,
-) -> report::FileCompareResult {
-    let actual =
-        BufReader::new(File::open(actual_path.as_ref()).expect("Could not open actual file"));
-    let nominal =
-        BufReader::new(File::open(nominal_path.as_ref()).expect("Could not open actual file"));
+) -> Result<report::FileCompareResult, Error> {
+    let actual = BufReader::new(fat_io_wrap_std(actual_path.as_ref(), &File::open)?);
+    let nominal = BufReader::new(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?);
 
     let mut diffs: Vec<String> = Vec::new();
 
-    let exclusion_list: Vec<_> = config
-        .ignore_lines
-        .as_ref()
-        .map(|v| {
-            v.iter()
-                .map(|exc| Regex::new(exc).expect("Plaintext exclusion regex broken!"))
-                .collect()
-        })
-        .unwrap_or_default();
+    let exclusion_list = config.get_ignore_list()?;
 
     actual
         .lines()
@@ -70,12 +88,12 @@ pub fn compare_files<P: AsRef<Path>>(
             }
         });
 
-    report::write_html_detail(
+    Ok(report::write_html_detail(
         nominal_path.as_ref(),
         actual_path.as_ref(),
         &diffs,
         rule_name,
-    )
+    )?)
 }
 
 #[cfg(test)]
@@ -91,6 +109,7 @@ mod test {
                 &HTMLCompareConfig::default(),
                 ""
             )
+            .unwrap()
             .is_error
         );
     }
@@ -101,7 +120,8 @@ mod test {
         let nominal = "tests/html/html_changed.html";
         let rule_name = "";
 
-        let result = compare_files(actual, nominal, &HTMLCompareConfig::default(), rule_name);
+        let result =
+            compare_files(actual, nominal, &HTMLCompareConfig::default(), rule_name).unwrap();
 
         assert!(result.is_error);
 
@@ -128,6 +148,7 @@ mod test {
                 },
                 ""
             )
+            .unwrap()
             .is_error
         );
     }
@@ -144,6 +165,7 @@ mod test {
                 },
                 ""
             )
+            .unwrap()
             .is_error
         );
     }
