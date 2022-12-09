@@ -88,6 +88,8 @@ pub fn compare_files<P: AsRef<Path>>(
 }
 
 #[cfg(test)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
 mod test {
     use super::*;
     use crate::hash::HashFunction::Sha256;
