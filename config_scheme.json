@@ -304,6 +304,7 @@
       ],
       "required": [
         "name",
+        "pattern_exclude",
         "pattern_include"
       ],
       "properties": {
@@ -311,13 +312,16 @@
           "type": "string"
         },
         "pattern_exclude": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "pattern_include": {
-          "type": "string"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }

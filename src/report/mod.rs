@@ -390,7 +390,7 @@ pub(crate) fn create(
                 let target = &sub_folder.join(detail);
                 info!("moving subfolder {:?} to {:?}", &detail, &target);
 
-                let files = crate::glob_files(detail, Some("*"))?;
+                let files = crate::glob_files(detail, &["*"])?;
                 for file in files.iter() {
                     if let Some(file_name) = file.file_name() {
                         if !target.exists() || !target.is_dir() {

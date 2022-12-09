@@ -1,5 +1,6 @@
 rules:
   - name: "JPG comparison"
-    pattern_include: "**/*.jpg"
+    pattern_include:
+      - "**/*.jpg"
     Image:
       threshold: 0.9

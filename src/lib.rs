@@ -77,26 +77,24 @@ struct ConfigurationFile {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 struct Rule {
     name: String,
-    pattern_include: String,
-    pattern_exclude: Option<String>,
+    pattern_include: Vec<String>,
+    pattern_exclude: Option<Vec<String>>,
     #[serde(flatten)]
     file_type: ComparisonMode,
 }
 
 fn glob_files(
     path: impl AsRef<Path>,
-    pattern: Option<&str>,
+    patterns: &[impl AsRef<str>],
 ) -> Result<Vec<PathBuf>, glob::PatternError> {
-    if let Some(pattern) = pattern {
-        let path_prefix = path.as_ref().join(pattern);
+    let mut files = Vec::new();
+    for pattern in patterns {
+        let path_prefix = path.as_ref().join(pattern.as_ref());
         let path_pattern = path_prefix.to_string_lossy();
         debug!("Globbing: {}", path_pattern);
-        Ok(glob::glob(path_pattern.as_ref())?
-            .filter_map(|c| c.ok())
-            .collect())
-    } else {
-        Ok(Vec::new())
+        files.extend(glob::glob(path_pattern.as_ref())?.filter_map(|p| p.ok()));
     }
+    Ok(files)
 }
 
 fn filter_exclude(paths: Vec<PathBuf>, excludes: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -180,12 +178,14 @@ fn process_rule(
         return Ok(false);
     }
 
-    let nominal_files_exclude = glob_files(nominal.as_ref(), rule.pattern_exclude.as_deref())?;
-    let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), Some(rule.pattern_include.as_str()))?;
+    let exclude_patterns = rule.pattern_exclude.as_deref().unwrap_or_default();
+
+    let nominal_files_exclude = glob_files(nominal.as_ref(), exclude_patterns)?;
+    let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), &rule.pattern_include)?;
     let nominal_cleaned_paths = filter_exclude(nominal_paths, nominal_files_exclude);
 
-    let actual_files_exclude = glob_files(actual.as_ref(), rule.pattern_exclude.as_deref())?;
-    let actual_paths: Vec<_> = glob_files(actual.as_ref(), Some(rule.pattern_include.as_str()))?;
+    let actual_files_exclude = glob_files(actual.as_ref(), exclude_patterns)?;
+    let actual_paths: Vec<_> = glob_files(actual.as_ref(), &rule.pattern_include)?;
     let actual_cleaned_paths = filter_exclude(actual_paths, actual_files_exclude);
 
     info!(
@@ -271,7 +271,7 @@ mod tests {
         let rule = Rule {
             name: "test rule".to_string(),
             file_type: ComparisonMode::Image(ImageCompareConfig { threshold: 1.0 }),
-            pattern_include: "*.".to_string(),
+            pattern_include: vec!["*.".to_string()],
             pattern_exclude: None,
         };
         let mut result = Vec::new();
