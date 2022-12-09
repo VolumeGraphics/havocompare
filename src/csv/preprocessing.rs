@@ -63,7 +63,7 @@ fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutatio
 
 fn sort_by_column_id(table: &mut Table, id: usize) -> Result<(), csv::Error> {
     let sort_master_col = table.columns.get(id).ok_or_else(|| {
-        csv::Error::AccessError(format!(
+        csv::Error::InvalidAccess(format!(
             "Column number sorting by id {} requested but column not found.",
             id
         ))
@@ -91,7 +91,7 @@ fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> 
         .iter()
         .find(|c| c.header.as_deref().unwrap_or_default() == name)
         .ok_or_else(|| {
-            csv::Error::AccessError(format!(
+            csv::Error::InvalidAccess(format!(
                 "Requested format sorting by column'{}' but column not found.",
                 name
             ))
@@ -129,7 +129,7 @@ fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
     debug!("Extracting headers...");
     for col in table.columns.iter_mut() {
         let title = col.rows.drain(0..1).next().ok_or_else(|| {
-            csv::Error::AccessError("Tried to extract header of empty column!".to_string())
+            csv::Error::InvalidAccess("Tried to extract header of empty column!".to_string())
         })?;
         if let Value::String(title) = title {
             col.header = Some(title);
@@ -141,9 +141,11 @@ fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::csv::Delimiters;
+    use crate::csv::{Column, Delimiters, Error};
     use std::fs::File;
 
     fn setup_table(delimiters: Option<Delimiters>) -> Table {
@@ -260,5 +262,43 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn sorting_by_mixed_column_fails() {
+        let column = Column {
+            header: Some("Field".to_string()),
+            rows: vec![
+                Value::from_str("1.0", &None),
+                Value::String("String-Value".to_string()),
+            ],
+        };
+        let mut table = Table {
+            columns: vec![column],
+        };
+        let order_by_name = sort_by_column_name(&mut table, "Field");
+        assert!(matches!(
+            order_by_name.unwrap_err(),
+            Error::UnexpectedValue(_, _)
+        ));
+
+        let order_by_id = sort_by_column_id(&mut table, 0);
+        assert!(matches!(
+            order_by_id.unwrap_err(),
+            Error::UnexpectedValue(_, _)
+        ));
+    }
+
+    #[test]
+    fn non_existing_table_fails() {
+        let mut table = setup_table(None);
+        let order_by_name = sort_by_column_name(&mut table, "Non-Existing-Field");
+        assert!(matches!(
+            order_by_name.unwrap_err(),
+            Error::InvalidAccess(_)
+        ));
+
+        let order_by_id = sort_by_column_id(&mut table, 999);
+        assert!(matches!(order_by_id.unwrap_err(), Error::InvalidAccess(_)));
     }
 }

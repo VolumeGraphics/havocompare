@@ -16,9 +16,9 @@ pub enum Error {
     #[error("Failed to evaluate globbing pattern! {0}")]
     IllegalGlobbingPattern(#[from] glob::PatternError),
     #[error("File access failed {0}")]
-    FileAccessError(#[from] FatIOError),
+    FileAccessFailed(#[from] FatIOError),
     #[error("Tera templating error {0}")]
-    TeraError(#[from] tera::Error),
+    TeraIssue(#[from] tera::Error),
     #[error("Problem processing file name {0}")]
     FileNameParsing(String),
 }

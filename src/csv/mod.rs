@@ -27,15 +27,15 @@ pub enum Error {
     #[error("Unexpected Value found {0} - {1}")]
     UnexpectedValue(Value, String),
     #[error("Tried accessing empty field")]
-    AccessError(String),
+    InvalidAccess(String),
     #[error("Failed to compile regex {0}")]
-    RegexCompilationError(#[from] regex::Error),
+    RegexCompilationFailed(#[from] regex::Error),
     #[error("Problem creating csv report {0}")]
-    ReportingError(#[from] report::Error),
+    ReportingFailed(#[from] report::Error),
     #[error("File access failed {0}")]
-    FileAccessError(#[from] FatIOError),
+    FileAccessFailed(#[from] FatIOError),
     #[error("IoError occured {0}")]
-    IoError(#[from] std::io::Error),
+    IoProblem(#[from] std::io::Error),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -449,7 +449,7 @@ fn guess_format_from_line(
             let capture = field_sep_regex.captures_iter(line).next();
             if let Some(cap) = capture {
                 field_separator = Some(cap[1].chars().next().ok_or_else(|| {
-                    Error::AccessError(format!(
+                    Error::InvalidAccess(format!(
                         "Could not capture field separator for guessing from '{}'",
                         line
                     ))
@@ -478,7 +478,7 @@ fn guess_format_from_line(
 
     for capture in decimal_separator_regex.captures_iter(line) {
         let sep = capture[1].chars().next().ok_or_else(|| {
-            Error::AccessError(format!(
+            Error::InvalidAccess(format!(
                 "Could not capture decimal separator for guessing from '{}'",
                 line
             ))
@@ -532,6 +532,8 @@ fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Result<Delimit
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::csv::DiffType::{DifferentValueTypes, OutOfTolerance, UnequalStrings};
@@ -1068,5 +1070,17 @@ mod tests {
         }
         let mut row_iterator = table.rows();
         assert!(row_iterator.all(|r| r.iter().all(|v| **v == Value::from_str("4.0", &None))));
+    }
+
+    #[test]
+    fn loading_non_existing_folder_fails() {
+        let conf = CSVCompareConfig {
+            comparison_modes: vec![],
+            delimiters: Delimiters::default(),
+            exclude_field_regex: None,
+            preprocessing: None,
+        };
+        let result = compare_paths("non_existing", "also_non_existing", &conf, "test");
+        assert!(matches!(result.unwrap_err(), Error::FileAccessFailed(_)));
     }
 }
