@@ -166,6 +166,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 ## Changelog
 
 ### 0.1.4
+- Remove all `unwrap` and `expect` in the library code in favor of correct error propagation
 - Add preprocessing options for CSV files
 - Refined readme.md
 - fix unique key creation in the report generation
