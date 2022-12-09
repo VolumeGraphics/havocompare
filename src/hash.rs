@@ -18,11 +18,11 @@ pub enum HashFunction {
 /// Errors during hash checking
 pub enum Error {
     #[error("Failed to compile regex {0}")]
-    RegexCompilationError(#[from] regex::Error),
+    RegexCompilationFailed(#[from] regex::Error),
     #[error("Problem creating hash report {0}")]
-    ReportingError(#[from] report::Error),
+    ReportingFailure(#[from] report::Error),
     #[error("File access failed {0}")]
-    FileAccessError(#[from] FatIOError),
+    FileAccessProblem(#[from] FatIOError),
 }
 
 impl HashFunction {

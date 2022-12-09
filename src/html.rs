@@ -44,11 +44,11 @@ impl Default for HTMLCompareConfig {
 /// Errors during html / plain text checking
 pub enum Error {
     #[error("Failed to compile regex {0}")]
-    RegexCompilationError(#[from] regex::Error),
+    RegexCompilationFailure(#[from] regex::Error),
     #[error("Problem creating hash report {0}")]
-    ReportingError(#[from] report::Error),
+    ReportingProblem(#[from] report::Error),
     #[error("File access failed {0}")]
-    FileAccessError(#[from] FatIOError),
+    FileAccessFailure(#[from] FatIOError),
 }
 
 pub fn compare_files<P: AsRef<Path>>(

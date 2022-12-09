@@ -287,6 +287,19 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "description": "PDF text compare",
+          "type": "object",
+          "required": [
+            "PDFText"
+          ],
+          "properties": {
+            "PDFText": {
+              "$ref": "#/definitions/HTMLCompareConfig"
+            }
+          },
+          "additionalProperties": false
         }
       ],
       "required": [
