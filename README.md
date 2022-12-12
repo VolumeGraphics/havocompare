@@ -83,7 +83,7 @@ rules:
       # auto-detection allows different delimiters for nominal and actual
       decimal_separator: '.'
       field_delimiter:  ';'
-      # can have Absolute or Relative
+      # can have Absolute or Relative or both
       comparison_modes:
         - Absolute: 1.0
         - Relative: 0.1
@@ -178,6 +178,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 ## Changelog
 
 ### 0.1.4
+- Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
 - Remove all `unwrap` and `expect` in the library code in favor of correct error propagation
 - Add preprocessing options for CSV files
 - Refined readme.md

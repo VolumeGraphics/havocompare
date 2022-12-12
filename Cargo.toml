@@ -4,7 +4,7 @@ description = "A flexible folder comparison tool / crate with html reporting."
 repository = "https://github.com/VolumeGraphics/havocompare"
 homepage = "https://github.com/VolumeGraphics/havocompare"
 documentation = "https://docs.rs/havocompare"
-version = "0.1.4-RC3"
+version = "0.1.4"
 edition = "2021"
 license = "MIT"
 authors = ["Volume Graphics GmbH"]
@@ -40,6 +40,6 @@ vg_errortools = "0.1.0"
 ansi_term = "0.12"
 
 [dev-dependencies]
-env_logger = "0.9"
+env_logger = "0.10"
 tracing = {version = "0.1", default-features = false}
 tracing-subscriber = {version = "0.3", default-features = false, features = ["env-filter", "fmt"]}
