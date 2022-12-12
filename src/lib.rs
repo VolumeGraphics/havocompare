@@ -156,6 +156,16 @@ fn process_file(
     compare_result
 }
 
+fn get_files(
+    path: impl AsRef<Path>,
+    patterns_include: &[impl AsRef<str>],
+    patterns_exclude: &[impl AsRef<str>],
+) -> Result<Vec<PathBuf>, glob::PatternError> {
+    let files_exclude = glob_files(path.as_ref(), patterns_exclude)?;
+    let files_include: Vec<_> = glob_files(path.as_ref(), patterns_include)?;
+    Ok(filter_exclude(files_include, files_exclude))
+}
+
 fn process_rule(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
@@ -180,13 +190,9 @@ fn process_rule(
 
     let exclude_patterns = rule.pattern_exclude.as_deref().unwrap_or_default();
 
-    let nominal_files_exclude = glob_files(nominal.as_ref(), exclude_patterns)?;
-    let nominal_paths: Vec<_> = glob_files(nominal.as_ref(), &rule.pattern_include)?;
-    let nominal_cleaned_paths = filter_exclude(nominal_paths, nominal_files_exclude);
-
-    let actual_files_exclude = glob_files(actual.as_ref(), exclude_patterns)?;
-    let actual_paths: Vec<_> = glob_files(actual.as_ref(), &rule.pattern_include)?;
-    let actual_cleaned_paths = filter_exclude(actual_paths, actual_files_exclude);
+    let nominal_cleaned_paths =
+        get_files(nominal.as_ref(), &rule.pattern_include, exclude_patterns)?;
+    let actual_cleaned_paths = get_files(actual.as_ref(), &rule.pattern_include, exclude_patterns)?;
 
     info!(
         "Found {} files matching includes in actual, {} files in nominal",
@@ -277,5 +283,28 @@ mod tests {
         let mut result = Vec::new();
         assert!(!process_rule("NOT_EXISTING", ".", &rule, &mut result).unwrap());
         assert!(!process_rule(".", "NOT_EXISTING", &rule, &mut result).unwrap());
+    }
+
+    #[test]
+    fn multiple_include_exclude_works() {
+        let pattern_include = vec![
+            "**/Components.csv".to_string(),
+            "**/CumulatedHistogram.csv".to_string(),
+        ];
+        let empty = vec![""];
+        let result =
+            get_files("tests/csv/data/", &pattern_include, &empty).expect("could not glob");
+        assert_eq!(result.len(), 2);
+        let excludes = vec!["**/Components.csv".to_string()];
+        let result =
+            get_files("tests/csv/data/", &pattern_include, &excludes).expect("could not glob");
+        assert_eq!(result.len(), 1);
+        let excludes = vec![
+            "**/Components.csv".to_string(),
+            "**/CumulatedHistogram.csv".to_string(),
+        ];
+        let result =
+            get_files("tests/csv/data/", &pattern_include, &excludes).expect("could not glob");
+        assert!(result.is_empty());
     }
 }
