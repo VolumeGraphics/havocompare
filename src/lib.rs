@@ -10,14 +10,16 @@
 #![deny(clippy::expect_used)]
 
 mod csv;
+pub use csv::CSVCompareConfig;
 mod hash;
+pub use hash::HashConfig;
 mod html;
 mod image;
+pub use crate::image::ImageCompareConfig;
 mod pdf;
 mod report;
 
-use crate::hash::HashConfig;
-use crate::html::HTMLCompareConfig;
+pub use crate::html::HTMLCompareConfig;
 use crate::report::FileCompareResult;
 use schemars::schema_for;
 use schemars_derive::JsonSchema;
@@ -56,11 +58,11 @@ pub enum Error {
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[allow(clippy::upper_case_acronyms)]
-enum ComparisonMode {
+pub enum ComparisonMode {
     /// smart CSV compare
-    CSV(csv::CSVCompareConfig),
+    CSV(CSVCompareConfig),
     /// thresholds comparison
-    Image(image::ImageCompareConfig),
+    Image(ImageCompareConfig),
     /// plain text compare
     PlainText(HTMLCompareConfig),
     /// Compare using file hashes
@@ -70,12 +72,12 @@ enum ComparisonMode {
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
-struct ConfigurationFile {
+pub struct ConfigurationFile {
     rules: Vec<Rule>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
-struct Rule {
+pub struct Rule {
     name: String,
     pattern_include: Vec<String>,
     pattern_exclude: Option<Vec<String>>,
