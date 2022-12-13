@@ -161,11 +161,16 @@ impl Mode {
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug)]
+/// Settings for the CSV comparison module
 pub struct CSVCompareConfig {
     #[serde(flatten)]
+    /// delimiters for the file parsing
     pub delimiters: Delimiters,
+    /// How numerical values shall be compared, strings are always checked for identity
     pub comparison_modes: Vec<Mode>,
+    /// Any field matching the given regex is excluded from comparison
     pub exclude_field_regex: Option<String>,
+    /// Preprocessing done to the csv files before beginning the comparison
     pub preprocessing: Option<Vec<Preprocessor>>,
 }
 

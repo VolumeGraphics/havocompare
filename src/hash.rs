@@ -44,7 +44,9 @@ impl HashFunction {
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
+/// Configuration options for the hash comparison module
 pub struct HashConfig {
+    /// Which hash function to use
     function: HashFunction,
 }
 

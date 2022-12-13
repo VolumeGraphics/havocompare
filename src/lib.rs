@@ -58,6 +58,7 @@ pub enum Error {
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[allow(clippy::upper_case_acronyms)]
+/// Representing the comparison mode
 pub enum ComparisonMode {
     /// smart CSV compare
     CSV(CSVCompareConfig),
@@ -72,15 +73,21 @@ pub enum ComparisonMode {
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
+/// Represents a whole configuration file consisting of several comparison rules
 pub struct ConfigurationFile {
     rules: Vec<Rule>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
+/// Representing a single comparison rule
 pub struct Rule {
+    /// The name of the rule - will be displayed in logs
     name: String,
+    /// A list of glob-patterns to include
     pattern_include: Vec<String>,
+    /// A list of glob-patterns to exclude - optional
     pattern_exclude: Option<Vec<String>>,
+    /// How these files shall be compared
     #[serde(flatten)]
     file_type: ComparisonMode,
 }
@@ -219,18 +226,16 @@ fn process_rule(
     Ok(all_okay)
 }
 
-/// The main function for comparing folders. It will parse a config file in yaml format, create a report in report_path and compare the folders nominal and actual.
-pub fn compare_folders(
+/// Use this function if you don't want this crate to load and parse a config file but provide a custom rules struct yourself
+pub fn compare_folders_cfg(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    config_file: impl AsRef<Path>,
+    config_struct: ConfigurationFile,
     report_path: impl AsRef<Path>,
 ) -> Result<bool, Error> {
-    let config_reader = fat_io_wrap_std(config_file, &File::open)?;
-    let config: ConfigurationFile = serde_yaml::from_reader(config_reader)?;
     let mut rule_results: Vec<report::RuleResult> = Vec::new();
 
-    let mut results = config.rules.into_iter().map(|rule| {
+    let mut results = config_struct.rules.into_iter().map(|rule| {
         let mut compare_results: Vec<Result<FileCompareResult, Box<dyn std::error::Error>>> =
             Vec::new();
         let okay = process_rule(
@@ -262,6 +267,18 @@ pub fn compare_folders(
     let all_okay = results.all(|result| result);
     report::create(&rule_results, report_path)?;
     Ok(all_okay)
+}
+
+/// The main function for comparing folders. It will parse a config file in yaml format, create a report in report_path and compare the folders nominal and actual.
+pub fn compare_folders(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    config_file: impl AsRef<Path>,
+    report_path: impl AsRef<Path>,
+) -> Result<bool, Error> {
+    let config_reader = fat_io_wrap_std(config_file, &File::open)?;
+    let config: ConfigurationFile = serde_yaml::from_reader(config_reader)?;
+    compare_folders_cfg(nominal, actual, config, report_path)
 }
 
 /// Create the jsonschema for the current configuration file format
