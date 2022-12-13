@@ -115,7 +115,7 @@ impl Display for DiffType {
     }
 }
 
-#[derive(Copy, Clone, JsonSchema, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Copy, Clone, JsonSchema, Debug, Deserialize, Serialize, PartialEq)]
 /// comparison mode for csv cells
 pub enum Mode {
     /// `(a-b).abs() < threshold`
