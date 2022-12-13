@@ -9,7 +9,8 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
-mod csv;
+/// comparison module for csv comparison
+pub mod csv;
 pub use csv::CSVCompareConfig;
 mod hash;
 pub use hash::HashConfig;

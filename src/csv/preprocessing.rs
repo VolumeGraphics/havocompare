@@ -18,7 +18,7 @@ pub enum Preprocessor {
 }
 
 impl Preprocessor {
-    pub fn process(&self, table: &mut Table) -> Result<(), csv::Error> {
+    pub(crate) fn process(&self, table: &mut Table) -> Result<(), csv::Error> {
         match self {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
