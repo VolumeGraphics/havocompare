@@ -204,6 +204,14 @@ pub struct Column {
     pub rows: Vec<Value>,
 }
 
+impl Column {
+    pub fn delete_contents(&mut self) {
+        self.header = Some("DELETED".to_string());
+        let row_count = self.rows.len();
+        self.rows = vec![Value::deleted(); row_count];
+    }
+}
+
 pub struct Table {
     pub columns: Vec<Column>,
 }

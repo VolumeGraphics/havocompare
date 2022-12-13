@@ -95,7 +95,7 @@ rules:
         - ExtractHeaders
         # Sort the table by column 0, beware that the column must only contain numbers / quantities
         - SortByColumnNumber: 0
-        # Delete a column by name, needs `ExtractHeaders` first
+        # Delete a column by name, needs `ExtractHeaders` first - delete sets all values to 'DELETED's
         - DeleteColumnByName: "Column to delete"
         - DeleteColumnByNumber: 1
         # Sorts are stable, so a second sort will keep the first sort as sub-order.
@@ -176,6 +176,10 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 
 ## Changelog
+
+### 0.1.5
+- Deletion of columns will no longer really delete them but replace every value with "DELETED"
+- Expose config struct to library API
 
 ### 0.1.4
 - Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
