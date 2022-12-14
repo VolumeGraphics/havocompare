@@ -47,7 +47,7 @@ impl HashFunction {
 /// Configuration options for the hash comparison module
 pub struct HashConfig {
     /// Which hash function to use
-    function: HashFunction,
+    pub function: HashFunction,
 }
 
 impl Default for HashConfig {

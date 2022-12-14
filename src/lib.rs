@@ -76,21 +76,21 @@ pub enum ComparisonMode {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// Represents a whole configuration file consisting of several comparison rules
 pub struct ConfigurationFile {
-    rules: Vec<Rule>,
+    pub rules: Vec<Rule>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// Representing a single comparison rule
 pub struct Rule {
     /// The name of the rule - will be displayed in logs
-    name: String,
+    pub name: String,
     /// A list of glob-patterns to include
-    pattern_include: Vec<String>,
+    pub pattern_include: Vec<String>,
     /// A list of glob-patterns to exclude - optional
-    pattern_exclude: Option<Vec<String>>,
+    pub pattern_exclude: Option<Vec<String>>,
     /// How these files shall be compared
     #[serde(flatten)]
-    file_type: ComparisonMode,
+    pub file_type: ComparisonMode,
 }
 
 fn glob_files(

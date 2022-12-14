@@ -11,7 +11,7 @@ use tracing::{error, info};
 /// Image comparison config options
 pub struct ImageCompareConfig {
     /// Threshold for image comparison < 0.5 is very dissimilar, 1.0 is identical
-    pub(crate) threshold: f64,
+    pub threshold: f64,
 }
 
 #[derive(Debug, Error)]
