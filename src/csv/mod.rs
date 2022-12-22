@@ -18,34 +18,40 @@ use std::io::{BufRead, BufReader, Read, Seek};
 use std::path::Path;
 use std::slice::{Iter, IterMut};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
 /// Possible errors during csv parsing
 pub enum Error {
     #[error("Unexpected Value found {0} - {1}")]
+    /// Value type was different than expected
     UnexpectedValue(Value, String),
     #[error("Tried accessing empty field")]
+    /// Tried to access a non-existing field
     InvalidAccess(String),
     #[error("Failed to compile regex {0}")]
+    /// Regex compilation failed
     RegexCompilationFailed(#[from] regex::Error),
     #[error("Problem creating csv report {0}")]
+    /// Reporting could not be created
     ReportingFailed(#[from] report::Error),
     #[error("File access failed {0}")]
+    /// File access failed
     FileAccessFailed(#[from] FatIOError),
     #[error("IoError occured {0}")]
+    /// Problem involving files or readers
     IoProblem(#[from] std::io::Error),
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Position {
+pub(crate) struct Position {
     pub row: usize,
     pub col: usize,
 }
 
 #[derive(Debug)]
-pub enum DiffType {
+pub(crate) enum DiffType {
     UnequalStrings {
         nominal: String,
         actual: String,
@@ -109,10 +115,14 @@ impl Display for DiffType {
     }
 }
 
-#[derive(Copy, Clone, JsonSchema, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, JsonSchema, Debug, Deserialize, Serialize, PartialEq)]
+/// comparison mode for csv cells
 pub enum Mode {
+    /// `(a-b).abs() < threshold`
     Absolute(f32),
+    /// `((a-b)/a).abs() < threshold`
     Relative(f32),
+    /// always matches
     Ignore,
 }
 
@@ -134,7 +144,7 @@ impl Display for Mode {
 }
 
 impl Mode {
-    pub fn in_tolerance(&self, nominal: &Quantity, actual: &Quantity) -> bool {
+    pub(crate) fn in_tolerance(&self, nominal: &Quantity, actual: &Quantity) -> bool {
         if nominal.value.is_nan() && actual.value.is_nan() {
             return true;
         }
@@ -161,17 +171,25 @@ impl Mode {
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug)]
+/// Settings for the CSV comparison module
 pub struct CSVCompareConfig {
     #[serde(flatten)]
+    /// delimiters for the file parsing
     pub delimiters: Delimiters,
+    /// How numerical values shall be compared, strings are always checked for identity
     pub comparison_modes: Vec<Mode>,
+    /// Any field matching the given regex is excluded from comparison
     pub exclude_field_regex: Option<String>,
+    /// Preprocessing done to the csv files before beginning the comparison
     pub preprocessing: Option<Vec<Preprocessor>>,
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+/// Delimiter configuration for file parsing
 pub struct Delimiters {
+    /// The delimiters of the csv fields (typically comma, semicolon or pipe)
     pub field_delimiter: Option<char>,
+    /// The decimal separator for floating point numbers (typically dot or comma)
     pub decimal_separator: Option<char>,
 }
 
@@ -185,7 +203,7 @@ impl Default for Delimiters {
 }
 
 impl Delimiters {
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.decimal_separator.is_none() && self.field_delimiter.is_none()
     }
 
@@ -199,17 +217,28 @@ impl Delimiters {
 }
 
 #[derive(Default, Clone)]
-pub struct Column {
+pub(crate) struct Column {
     pub header: Option<String>,
     pub rows: Vec<Value>,
 }
 
-pub struct Table {
+impl Column {
+    pub fn delete_contents(&mut self) {
+        self.header = Some("DELETED".to_string());
+        let row_count = self.rows.len();
+        self.rows = vec![Value::deleted(); row_count];
+    }
+}
+
+pub(crate) struct Table {
     pub columns: Vec<Column>,
 }
 
 impl Table {
-    pub fn from_reader<R: Read + Seek>(mut input: R, config: &Delimiters) -> Result<Table, Error> {
+    pub(crate) fn from_reader<R: Read + Seek>(
+        mut input: R,
+        config: &Delimiters,
+    ) -> Result<Table, Error> {
         let delimiters = match config.is_empty() {
             false => Cow::Borrowed(config),
             true => Cow::Owned(guess_format_from_reader(&mut input)?),
@@ -217,28 +246,42 @@ impl Table {
         debug!("Final delimiters: {:?}", delimiters);
         let mut cols = Vec::new();
         let input = BufReader::new(input);
-        input.lines().filter_map(|l| l.ok()).for_each(|row| {
-            let row = row.trim_start_matches('\u{feff}');
-            let fields = split_row(row, &delimiters);
-            if cols.is_empty() {
-                cols.resize_with(fields.len(), Column::default);
-            }
-            fields
-                .into_iter()
-                .zip(cols.iter_mut())
-                .for_each(|(f, col)| col.rows.push(f));
-        });
+        let result: Result<Vec<()>, Error> = input
+            .lines()
+            .filter_map(|l| l.ok())
+            .map(|r| r.trim_start_matches('\u{feff}').to_owned())
+            .map(|r| split_row(r.as_str(), &delimiters))
+            .filter(|r| !r.is_empty())
+            .map(|fields| {
+                if cols.is_empty() {
+                    cols.resize_with(fields.len(), Column::default);
+                }
+                if fields.len() != cols.len() {
+                    let message = format!("Skipping row due to inconsistent number of columns! First row had {}, this row has {} (row: {:?})",cols.len(), fields.len(), fields);
+                    warn!("{}", message.as_str());
+                } else {
+                    fields
+                        .into_iter()
+                        .zip(cols.iter_mut())
+                        .for_each(|(f, col)| col.rows.push(f));
+                }
+                Ok(())
+            }).collect();
+
+        if result.is_err() {
+            warn!("Errors occurred during reading of the csv to a table!");
+        }
 
         Ok(Table { columns: cols })
     }
 
-    pub fn rows(&self) -> RowIterator {
+    pub(crate) fn rows(&self) -> RowIterator {
         RowIterator {
             position: self.columns.iter().map(|c| c.rows.iter()).collect(),
         }
     }
 
-    pub fn rows_mut(&mut self) -> RowIteratorMut {
+    pub(crate) fn rows_mut(&mut self) -> RowIteratorMut {
         RowIteratorMut {
             position: self.columns.iter_mut().map(|c| c.rows.iter_mut()).collect(),
         }
@@ -268,7 +311,7 @@ macro_rules! impl_ex_size_it {
 
 impl_ex_size_it!(RowIteratorMut<'_>, RowIterator<'_>);
 
-pub struct RowIteratorMut<'a> {
+pub(crate) struct RowIteratorMut<'a> {
     position: Vec<IterMut<'a, Value>>,
 }
 
@@ -279,7 +322,7 @@ impl<'a> Iterator for RowIteratorMut<'a> {
     }
 }
 
-pub struct RowIterator<'a> {
+pub(crate) struct RowIterator<'a> {
     position: Vec<Iter<'a, Value>>,
 }
 
@@ -290,7 +333,7 @@ impl<'a> Iterator for RowIterator<'a> {
     }
 }
 
-pub fn compare_tables(
+pub(crate) fn compare_tables(
     nominal: &Table,
     actual: &Table,
     config: &CSVCompareConfig,
@@ -312,6 +355,9 @@ pub fn compare_tables(
 }
 
 fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
+    if row.is_empty() {
+        return Vec::new();
+    }
     if let Some(row_delimiter) = config.field_delimiter.as_ref() {
         row.split(*row_delimiter)
             .enumerate()
@@ -410,7 +456,7 @@ fn get_diffs_readers<R: Read + Seek>(
     Ok((nominal, actual, comparison_result))
 }
 
-pub fn compare_paths(
+pub(crate) fn compare_paths(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     config: &CSVCompareConfig,
@@ -617,7 +663,7 @@ mod tests {
             &Delimiters::default(),
         )
         .unwrap();
-        assert_eq!(table.rows().len(), 7);
+        assert_eq!(table.rows().len(), 6);
     }
 
     #[test]
@@ -1080,5 +1126,17 @@ mod tests {
         };
         let result = compare_paths("non_existing", "also_non_existing", &conf, "test");
         assert!(matches!(result.unwrap_err(), Error::FileAccessFailed(_)));
+    }
+
+    #[test]
+    fn table_with_newlines_consistent_col_lengths() {
+        let table = Table::from_reader(
+            File::open("tests/csv/data/defects.csv").unwrap(),
+            &Delimiters::autodetect(),
+        )
+        .unwrap();
+        for col in table.columns.iter() {
+            assert_eq!(col.rows.len(), table.columns.first().unwrap().rows.len());
+        }
     }
 }

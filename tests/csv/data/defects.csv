@@ -1,0 +1,4 @@
+Probability,Radius [mm],Diameter [mm],Center x [mm],Center y [mm],Center z [mm],Volume [mm³],Voxel,Surface [mm²],Classification,Gap [mm],Compactness,Sphericity,Projected size x [mm],Projected size y [mm],Projected size z [mm],PCA deviation 1 [mm],PCA deviation 2 [mm],PCA deviation 3 [mm],PCA max. deviation ratio [%],PCA min. deviation ratio [%],Min. gray value,Max. gray value,Mean gray value,Deviation of gray values,Label,Projected area (yz-plane) [mm²],Projected area (xz-plane) [mm²],Projected area (xy-plane) [mm²],Tolerance status
+0.00,0.02236,0.04472,-9.83108,-5.44005,15.91616,0.00002,0,0.00381,,0.07929,0.51,1.00,0.08943,0.04472,0.04472,0.01118,0.01118,0.01118,49.99999,50.00000,32696,32696,32696,0,6795,0.00200,0.00400,0.00400,Valid
+0.00,0.02236,0.04472,7.45788,-8.50014,23.92020,0.00002,0,0.00381,,0.02511,0.51,1.00,0.08943,0.04472,0.04472,0.01118,0.01118,0.01118,49.99999,50.00000,27158,27158,27158,0,8991,0.00200,0.00400,0.00400,Valid
+

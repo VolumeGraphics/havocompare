@@ -49,6 +49,10 @@ impl Display for Value {
 }
 
 impl Value {
+    pub fn deleted() -> Value {
+        Value::from_str("DELETED", &None)
+    }
+
     fn get_numerical_value(field_split: &[&str]) -> Option<f32> {
         if field_split.len() == 1 || field_split.len() == 2 {
             return field_split.first().and_then(|s| s.parse::<f32>().ok());

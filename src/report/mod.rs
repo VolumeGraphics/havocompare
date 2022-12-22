@@ -115,7 +115,7 @@ pub fn write_html_detail(
     Ok(result)
 }
 
-pub fn write_csv_detail(
+pub(crate) fn write_csv_detail(
     nominal_table: Table,
     actual_table: Table,
     nominal: impl AsRef<Path>,

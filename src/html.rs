@@ -12,13 +12,16 @@ use vg_errortools::fat_io_wrap_std;
 use vg_errortools::FatIOError;
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
+/// Plain text comparison config, also used for PDF
 pub struct HTMLCompareConfig {
+    /// Normalized Damerau-Levenshtein distance, 0.0 = bad, 1.0 = identity
     pub threshold: f64,
+    /// Lines matching any of the given regex will be excluded from comparison
     pub ignore_lines: Option<Vec<String>>,
 }
 
 impl HTMLCompareConfig {
-    pub fn get_ignore_list(&self) -> Result<Vec<Regex>, regex::Error> {
+    pub(crate) fn get_ignore_list(&self) -> Result<Vec<Regex>, regex::Error> {
         let exclusion_list: Option<Result<Vec<_>, regex::Error>> = self
             .ignore_lines
             .as_ref()

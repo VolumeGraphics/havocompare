@@ -18,7 +18,7 @@ pub enum Preprocessor {
 }
 
 impl Preprocessor {
-    pub fn process(&self, table: &mut Table) -> Result<(), csv::Error> {
+    pub(crate) fn process(&self, table: &mut Table) -> Result<(), csv::Error> {
         match self {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
@@ -36,17 +36,13 @@ fn delete_row_by_regex(table: &mut Table, regex: &str) -> Result<(), csv::Error>
     table
         .rows_mut()
         .filter(|row| row.iter().any(|v| regex.is_match(v.to_string().as_str())))
-        .for_each(|mut row| {
-            row.iter_mut()
-                .for_each(|v| **v = Value::from_str("DELETED", &None))
-        });
+        .for_each(|mut row| row.iter_mut().for_each(|v| **v = Value::deleted()));
     Ok(())
 }
 
 fn delete_row_by_number(table: &mut Table, id: usize) -> Result<(), csv::Error> {
     if let Some(mut v) = table.rows_mut().nth(id) {
-        v.iter_mut()
-            .for_each(|v| **v = Value::from_str("DELETED", &None))
+        v.iter_mut().for_each(|v| **v = Value::deleted())
     }
     Ok(())
 }
@@ -114,14 +110,20 @@ fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> 
 }
 
 fn delete_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
-    table
+    if let Some(c) = table
         .columns
-        .retain(|col| col.header.as_deref().unwrap_or_default() != name);
+        .iter_mut()
+        .find(|col| col.header.as_deref().unwrap_or_default() == name)
+    {
+        c.delete_contents();
+    }
     Ok(())
 }
 
 fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> {
-    table.columns.remove(id);
+    if let Some(col) = table.columns.get_mut(id) {
+        col.delete_contents();
+    }
     Ok(())
 }
 
@@ -176,8 +178,15 @@ mod tests {
         delete_column_number(&mut table, 0).unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
-            "Surface [mm²]"
+            "DELETED"
         );
+        assert!(table
+            .columns
+            .first()
+            .unwrap()
+            .rows
+            .iter()
+            .all(|v| *v == csv::Value::deleted()));
     }
 
     #[test]
@@ -186,9 +195,16 @@ mod tests {
         extract_headers(&mut table).unwrap();
         delete_column_name(&mut table, "Surface [mm²]").unwrap();
         assert_eq!(
-            table.columns.first().unwrap().header.as_deref().unwrap(),
-            "Deviation [mm]"
+            table.columns.last().unwrap().header.as_deref().unwrap(),
+            "DELETED"
         );
+        assert!(table
+            .columns
+            .last()
+            .unwrap()
+            .rows
+            .iter()
+            .all(|v| *v == csv::Value::deleted()));
     }
 
     #[test]
