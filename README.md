@@ -180,6 +180,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 ### 0.1.5
 - Deletion of columns will no longer really delete them but replace every value with "DELETED"
 - Expose config struct to library API
+- Fixed a bug regarding wrong handling of multiple empty lines
 
 ### 0.1.4
 - Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
