@@ -18,7 +18,7 @@ use std::io::{BufRead, BufReader, Read, Seek};
 use std::path::Path;
 use std::slice::{Iter, IterMut};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -246,17 +246,31 @@ impl Table {
         debug!("Final delimiters: {:?}", delimiters);
         let mut cols = Vec::new();
         let input = BufReader::new(input);
-        input.lines().filter_map(|l| l.ok()).for_each(|row| {
-            let row = row.trim_start_matches('\u{feff}');
-            let fields = split_row(row, &delimiters);
-            if cols.is_empty() {
-                cols.resize_with(fields.len(), Column::default);
-            }
-            fields
-                .into_iter()
-                .zip(cols.iter_mut())
-                .for_each(|(f, col)| col.rows.push(f));
-        });
+        let result: Result<Vec<()>, Error> = input
+            .lines()
+            .filter_map(|l| l.ok())
+            .map(|r| r.trim_start_matches('\u{feff}').to_owned())
+            .map(|r| split_row(r.as_str(), &delimiters))
+            .filter(|r| !r.is_empty())
+            .map(|fields| {
+                if cols.is_empty() {
+                    cols.resize_with(fields.len(), Column::default);
+                }
+                if fields.len() != cols.len() {
+                    let message = format!("Skipping row due to inconsistent number of columns! First row had {}, this row has {} (row: {:?})",cols.len(), fields.len(), fields);
+                    warn!("{}", message.as_str());
+                } else {
+                    fields
+                        .into_iter()
+                        .zip(cols.iter_mut())
+                        .for_each(|(f, col)| col.rows.push(f));
+                }
+                Ok(())
+            }).collect();
+
+        if result.is_err() {
+            warn!("Errors occurred during reading of the csv to a table!");
+        }
 
         Ok(Table { columns: cols })
     }
@@ -341,6 +355,9 @@ pub(crate) fn compare_tables(
 }
 
 fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
+    if row.is_empty() {
+        return Vec::new();
+    }
     if let Some(row_delimiter) = config.field_delimiter.as_ref() {
         row.split(*row_delimiter)
             .enumerate()
@@ -646,7 +663,7 @@ mod tests {
             &Delimiters::default(),
         )
         .unwrap();
-        assert_eq!(table.rows().len(), 7);
+        assert_eq!(table.rows().len(), 6);
     }
 
     #[test]
@@ -1109,5 +1126,17 @@ mod tests {
         };
         let result = compare_paths("non_existing", "also_non_existing", &conf, "test");
         assert!(matches!(result.unwrap_err(), Error::FileAccessFailed(_)));
+    }
+
+    #[test]
+    fn table_with_newlines_consistent_col_lengths() {
+        let table = Table::from_reader(
+            File::open("tests/csv/data/defects.csv").unwrap(),
+            &Delimiters::autodetect(),
+        )
+        .unwrap();
+        for col in table.columns.iter() {
+            assert_eq!(col.rows.len(), table.columns.first().unwrap().rows.len());
+        }
     }
 }

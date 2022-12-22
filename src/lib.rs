@@ -76,6 +76,7 @@ pub enum ComparisonMode {
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// Represents a whole configuration file consisting of several comparison rules
 pub struct ConfigurationFile {
+    /// A list of all rules to be checked on run
     pub rules: Vec<Rule>,
 }
 
