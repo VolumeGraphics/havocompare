@@ -177,6 +177,9 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ## Changelog
 
+### 0.1.6
+- Reworked CSV reporting to have an interleaved and more compact view 
+
 ### 0.1.5
 - Deletion of columns will no longer really delete them but replace every value with "DELETED"
 - Expose config struct to library API

@@ -38,10 +38,28 @@ pub(crate) struct RuleResult {
 }
 
 #[derive(Serialize, Debug, Clone)]
-pub struct CSVReport {
+pub struct CSVReportColumn {
     pub nominal_value: String,
     pub actual_value: String,
     pub diffs: Vec<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct CSVReportRow {
+    pub columns: Vec<CSVReportColumn>,
+    pub has_diff: bool,
+    pub has_error: bool,
+}
+
+fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
+    path.file_name()
+        .map(|f| f.to_string_lossy())
+        .ok_or_else(|| {
+            Error::FileNameParsing(format!(
+                "Could not extract filename from {}",
+                path.to_string_lossy()
+            ))
+        })
 }
 
 pub fn create_sub_folder(
@@ -76,9 +94,12 @@ pub fn write_html_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
+    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
+
     let mut result = FileCompareResult {
-        nominal: nominal.as_ref().to_string_lossy().to_string(),
-        actual: actual.as_ref().to_string_lossy().to_string(),
+        nominal: nominal_file_name,
+        actual: actual_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -123,43 +144,66 @@ pub(crate) fn write_csv_detail(
     diffs: &[DiffType],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
+    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
+
     let mut result = FileCompareResult {
-        nominal: nominal.as_ref().to_string_lossy().to_string(),
-        actual: actual.as_ref().to_string_lossy().to_string(),
+        nominal: nominal_file_name,
+        actual: actual_file_name,
         is_error: false,
         detail_path: None,
     };
 
-    let headers: Vec<_> = nominal_table
+    let mut headers: CSVReportRow = CSVReportRow {
+        columns: vec![],
+        has_diff: false,
+        has_error: false,
+    };
+
+    nominal_table
         .columns
         .iter()
         .zip(actual_table.columns.iter())
-        .map(|(n, a)| CSVReport {
-            actual_value: a
-                .header
-                .as_deref()
-                .unwrap_or("Header preprocessing not enabled in config")
-                .to_owned(),
-            nominal_value: n
-                .header
-                .as_deref()
-                .unwrap_or("Header preprocessing not enabled in config")
-                .to_owned(),
-            diffs: Vec::new(),
-        })
-        .collect();
+        .for_each(|(n, a)| {
+            let a_header = a.header.as_deref();
+            let n_header = n.header.as_deref();
 
-    let rows: Vec<Vec<_>> = nominal_table
+            if a_header.is_some() && n_header.is_some() {
+                let actual_value = a_header
+                    .unwrap_or("Header preprocessing not enabled in config")
+                    .to_owned();
+
+                let nominal_value = n_header
+                    .unwrap_or("Header preprocessing not enabled in config")
+                    .to_owned();
+
+                if nominal_value != actual_value {
+                    headers.has_diff = true;
+                }
+
+                headers.columns.push(CSVReportColumn {
+                    actual_value,
+                    nominal_value,
+                    diffs: Vec::new(),
+                });
+            }
+        });
+
+    let rows: Vec<CSVReportRow> = nominal_table
         .rows()
         .zip(actual_table.rows())
         .enumerate()
         .map(|(row, (n, a))| {
-            n.into_iter()
+            let mut has_diff = false;
+            let mut has_error = false;
+
+            let columns: Vec<CSVReportColumn> = n
+                .into_iter()
                 .zip(a.into_iter())
                 .enumerate()
                 .map(|(col, (n, a))| {
                     let current_pos = Position { col, row };
-                    CSVReport {
+                    let csv_report = CSVReportColumn {
                         nominal_value: n.to_string(),
                         actual_value: a.to_string(),
                         diffs: diffs
@@ -183,9 +227,25 @@ pub(crate) fn write_csv_detail(
                                 }
                             })
                             .collect(),
+                    };
+
+                    if !csv_report.diffs.is_empty() {
+                        has_error = true;
                     }
+
+                    if csv_report.nominal_value != csv_report.actual_value {
+                        has_diff = true;
+                    }
+
+                    csv_report
                 })
-                .collect()
+                .collect();
+
+            CSVReportRow {
+                has_error,
+                has_diff,
+                columns,
+            }
         })
         .collect();
 
@@ -222,9 +282,12 @@ pub fn write_image_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
+    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
+
     let mut result = FileCompareResult {
-        nominal: nominal.as_ref().to_string_lossy().to_string(),
-        actual: actual.as_ref().to_string_lossy().to_string(),
+        nominal: nominal_file_name,
+        actual: actual_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -246,17 +309,6 @@ pub fn write_image_detail(
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
-
-    fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
-        path.file_name()
-            .map(|f| f.to_string_lossy())
-            .ok_or_else(|| {
-                Error::FileNameParsing(format!(
-                    "Could not extract filename from {}",
-                    path.to_string_lossy()
-                ))
-            })
-    }
 
     let actual_file_extension = get_file_name(actual.as_ref())?;
     let nominal_file_extension = get_file_name(nominal.as_ref())?;
@@ -298,9 +350,12 @@ pub fn write_pdf_detail(
     diffs: &[(usize, String)],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
+    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
+
     let mut result = FileCompareResult {
-        nominal: nominal.as_ref().to_string_lossy().to_string(),
-        actual: actual.as_ref().to_string_lossy().to_string(),
+        nominal: nominal_file_name,
+        actual: actual_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -327,13 +382,13 @@ pub fn write_pdf_detail(
         template::PLAIN_PDF_DETAIL_TEMPLATE,
     )?;
 
-    let combined_lines: Vec<CSVReport> = actual_string
+    let combined_lines: Vec<CSVReportColumn> = actual_string
         .lines()
         .enumerate()
         .into_iter()
         .zip(nominal_string.lines().into_iter())
         .map(|((l, a), n)| {
-            let mut result = CSVReport {
+            let mut result = CSVReportColumn {
                 nominal_value: n.replace(' ', "&nbsp;"),
                 actual_value: a.replace(' ', "&nbsp;"),
                 diffs: vec![],
@@ -421,6 +476,7 @@ pub(crate) fn write_index(
     let index_file = report_dir.as_ref().join(template::INDEX_FILENAME);
 
     let mut tera = Tera::default();
+
     tera.add_raw_template(&index_file.to_string_lossy(), template::INDEX_TEMPLATE)?;
 
     let mut ctx = Context::new();
