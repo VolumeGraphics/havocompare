@@ -259,11 +259,14 @@ pub(crate) fn write_csv_detail(
         template::PLAIN_CSV_DETAIL_TEMPLATE,
     )?;
 
+    let row_index_increment: usize = if headers.columns.is_empty() { 0 } else { 1 };
+
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
     ctx.insert("rows", &rows);
     ctx.insert("headers", &headers);
+    ctx.insert("row_index_increment", &row_index_increment);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
     info!("detail html {:?} created", &detail_file);

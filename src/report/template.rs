@@ -25,7 +25,7 @@ pub const INDEX_TEMPLATE: &str = r###"
 			padding:10px;
 		}
 
-		table.dataTable {
+		.dataTables_wrapper {
 			font-family: monospace;
     		font-size: 10pt;
 		}
@@ -247,6 +247,9 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 		
 		table.dataTable {
 			border: 1px solid #999999;
+		}
+
+		.dataTables_wrapper {
 			font-family: monospace;
     		font-size: 10pt;
 		}
@@ -294,8 +297,8 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
     <thead>
     {% if headers.columns|length > 0 %}
     	<tr>
-	    	<th>0{% if headers.has_diff %}<br>&nbsp;{% endif %}</th>
-	    	<th>{% if headers.has_diff %}&nbsp;<br>{% endif %}0</th>
+	    	<th>1{% if headers.has_diff %}<br>&nbsp;{% endif %}</th>
+	    	<th>{% if headers.has_diff %}&nbsp;<br>{% endif %}1</th>
 			{% for col in headers.columns %}
 				<th>
 					{{ col.nominal_value }}
@@ -318,8 +321,8 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
     <tbody>
         {% for row in rows %}
             <tr {% if row.has_error %} class="error" {% endif %}>
-            	<td data-order="{{ loop.index }}">{{ loop.index }}{% if row.has_diff or row.has_error %}<br>&nbsp;{% endif %}</td>
-            	<td data-order="{{ loop.index }}">{% if row.has_diff or row.has_error %}&nbsp;<br>{% endif %}{{ loop.index }}</td>
+            	<td data-order="{{ loop.index }}">{{ loop.index + row_index_increment }}{% if row.has_diff or row.has_error %}<br>&nbsp;{% endif %}</td>
+            	<td data-order="{{ loop.index }}">{% if row.has_diff or row.has_error %}&nbsp;<br>{% endif %}{{ loop.index + row_index_increment }}</td>
             	{% for col in row.columns %}
 					<td>
 					{{ col.nominal_value }}
@@ -345,7 +348,9 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 			columnDefs: [
     			{ type: "num", "targets": 0 },
     			{ type: "num", "targets": 1 }
-			]
+			],
+			bPaginate: false,
+    		bLengthChange: false,
 		});
     });
 </script>
