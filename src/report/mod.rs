@@ -94,12 +94,9 @@ pub fn write_html_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
-    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
-
     let mut result = FileCompareResult {
-        nominal: nominal_file_name,
-        actual: actual_file_name,
+        nominal: get_file_name(nominal.as_ref())?.to_string(),
+        actual: get_file_name(actual.as_ref())?.to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -144,12 +141,9 @@ pub(crate) fn write_csv_detail(
     diffs: &[DiffType],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
-    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
-
     let mut result = FileCompareResult {
-        nominal: nominal_file_name,
-        actual: actual_file_name,
+        nominal: get_file_name(nominal.as_ref())?.to_string(),
+        actual: get_file_name(actual.as_ref())?.to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -168,14 +162,9 @@ pub(crate) fn write_csv_detail(
             let a_header = a.header.as_deref();
             let n_header = n.header.as_deref();
 
-            if a_header.is_some() && n_header.is_some() {
-                let actual_value = a_header
-                    .unwrap_or("Header preprocessing not enabled in config")
-                    .to_owned();
-
-                let nominal_value = n_header
-                    .unwrap_or("Header preprocessing not enabled in config")
-                    .to_owned();
+            if let (Some(a_header), Some(n_header)) = (a_header, n_header) {
+                let actual_value = a_header.to_owned();
+                let nominal_value = n_header.to_owned();
 
                 if nominal_value != actual_value {
                     headers.has_diff = true;
@@ -285,12 +274,9 @@ pub fn write_image_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
-    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
-
     let mut result = FileCompareResult {
-        nominal: nominal_file_name,
-        actual: actual_file_name,
+        nominal: get_file_name(nominal.as_ref())?.to_string(),
+        actual: get_file_name(actual.as_ref())?.to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -313,11 +299,8 @@ pub fn write_image_detail(
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
 
-    let actual_file_extension = get_file_name(actual.as_ref())?;
-    let nominal_file_extension = get_file_name(nominal.as_ref())?;
-
-    let actual_image = format!("actual_image_{}", actual_file_extension);
-    let nominal_image = format!("nominal_image_.{}", nominal_file_extension);
+    let actual_image = format!("actual_image_{}", get_file_name(actual.as_ref())?);
+    let nominal_image = format!("nominal_image_.{}", get_file_name(nominal.as_ref())?);
 
     fs::copy(actual.as_ref(), sub_folder.join(&actual_image))
         .map_err(|e| FatIOError::from_std_io_err(e, actual.as_ref().to_path_buf()))?;
@@ -353,12 +336,9 @@ pub fn write_pdf_detail(
     diffs: &[(usize, String)],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let nominal_file_name = get_file_name(nominal.as_ref())?.to_string();
-    let actual_file_name = get_file_name(actual.as_ref())?.to_string();
-
     let mut result = FileCompareResult {
-        nominal: nominal_file_name,
-        actual: actual_file_name,
+        nominal: get_file_name(nominal.as_ref())?.to_string(),
+        actual: get_file_name(actual.as_ref())?.to_string(),
         is_error: false,
         detail_path: None,
     };
