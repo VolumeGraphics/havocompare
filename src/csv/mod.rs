@@ -39,9 +39,17 @@ pub enum Error {
     #[error("File access failed {0}")]
     /// File access failed
     FileAccessFailed(#[from] FatIOError),
-    #[error("IoError occured {0}")]
+    #[error("IoError occurred {0}")]
     /// Problem involving files or readers
     IoProblem(#[from] std::io::Error),
+
+    #[error("Format guessing failed")]
+    /// Failure to guess field delimiters - decimal separator guessing is optional
+    FormatGuessingFailure,
+
+    #[error("A string literal was started but did never end")]
+    /// A string literal was started but did never end
+    UnterminatedLiteral,
 }
 
 #[derive(Clone, Copy, Debug)]
