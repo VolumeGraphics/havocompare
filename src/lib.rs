@@ -11,7 +11,9 @@
 
 /// comparison module for csv comparison
 pub mod csv;
+
 pub use csv::CSVCompareConfig;
+use std::borrow::Cow;
 mod hash;
 pub use hash::HashConfig;
 mod html;
@@ -26,6 +28,7 @@ use schemars::schema_for;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, error, info};
@@ -40,10 +43,14 @@ pub enum Error {
     /// Regex pattern requested could not be compiled
     #[error("Failed to compile regex! {0}")]
     RegexCompilationError(#[from] regex::Error),
-    /// An error occured in the csv rule checker
+    /// An error occurred in the csv rule checker
     #[error("CSV module error")]
     CSVModuleError(#[from] csv::Error),
-    /// An error occured in the reporting module
+    /// An error occurred in the image rule checker
+    #[error("CSV module error")]
+    ImageModuleError(#[from] image::Error),
+
+    /// An error occurred in the reporting module
     #[error("Error occurred during report creation {0}")]
     ReportingError(#[from] report::Error),
     /// An error occurred during reading yaml
@@ -55,6 +62,10 @@ pub enum Error {
     /// A problem happened while accessing a file
     #[error("File access failed {0}")]
     FileAccessError(#[from] FatIOError),
+
+    /// could not extract filename from path
+    #[error("File path parsing failed")]
+    FilePathParsingFails(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -73,11 +84,29 @@ pub enum ComparisonMode {
     PDFText(HTMLCompareConfig),
 }
 
+fn get_file_name(path: &Path) -> Option<Cow<str>> {
+    path.file_name().map(|f| f.to_string_lossy())
+}
+
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// Represents a whole configuration file consisting of several comparison rules
 pub struct ConfigurationFile {
     /// A list of all rules to be checked on run
     pub rules: Vec<Rule>,
+}
+
+impl ConfigurationFile {
+    /// creates a [`ConfigurationFile`] file struct from anything implementing `Read`
+    pub fn from_reader(reader: impl Read) -> Result<ConfigurationFile, Error> {
+        let config: ConfigurationFile = serde_yaml::from_reader(reader)?;
+        Ok(config)
+    }
+
+    /// creates a [`ConfigurationFile`] from anything path-convertible
+    pub fn from_file(file: impl AsRef<Path>) -> Result<ConfigurationFile, Error> {
+        let config_reader = fat_io_wrap_std(file, &File::open)?;
+        Self::from_reader(BufReader::new(config_reader))
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -278,8 +307,7 @@ pub fn compare_folders(
     config_file: impl AsRef<Path>,
     report_path: impl AsRef<Path>,
 ) -> Result<bool, Error> {
-    let config_reader = fat_io_wrap_std(config_file, &File::open)?;
-    let config: ConfigurationFile = serde_yaml::from_reader(config_reader)?;
+    let config = ConfigurationFile::from_file(config_file)?;
     compare_folders_cfg(nominal, actual, config, report_path)
 }
 

@@ -248,14 +248,12 @@ pub fn write_image_detail(
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
 
     fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
-        path.file_name()
-            .map(|f| f.to_string_lossy())
-            .ok_or_else(|| {
-                Error::FileNameParsing(format!(
-                    "Could not extract filename from {}",
-                    path.to_string_lossy()
-                ))
-            })
+        crate::get_file_name(path).ok_or_else(|| {
+            Error::FileNameParsing(format!(
+                "Could not extract filename from {}",
+                path.to_string_lossy()
+            ))
+        })
     }
 
     let actual_file_extension = get_file_name(actual.as_ref())?;

@@ -7,13 +7,21 @@ use std::cmp::Ordering::Equal;
 use tracing::{debug, warn};
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug)]
+/// Preprocessor options
 pub enum Preprocessor {
+    /// Try to extract the headers from the first row - fallible if first row contains a number
     ExtractHeaders,
+    /// Replace all fields in column by number by a deleted marker
     DeleteColumnByNumber(usize),
+    /// Replace all fields in column by name by a deleted marker
     DeleteColumnByName(String),
+    /// Sort rows by column with given name. Fails if no headers were extracted or column name is not found, or if any row has no numbers there
     SortByColumnName(String),
+    /// Sort rows by column with given number. Fails if any row has no numbers there or if out of bounds.
     SortByColumnNumber(usize),
+    /// Replace all fields in row with given number by a deleted marker
     DeleteRowByNumber(usize),
+    /// Replace all fields in row  where at least a single field matches regex by a deleted marker
     DeleteRowByRegex(String),
 }
 
