@@ -7,18 +7,16 @@ pub use preprocessing::Preprocessor;
 use value::Quantity;
 use value::Value;
 
-use crate::csv::tokenizer::guess_format_from_reader;
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek};
+use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 use std::slice::{Iter, IterMut};
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -50,6 +48,10 @@ pub enum Error {
     #[error("A string literal was started but did never end")]
     /// A string literal was started but did never end
     UnterminatedLiteral,
+
+    #[error("CSV format invalid: first row has a different column number then row {0}")]
+    /// The embedded row number had a different column count than the first
+    UnstableColumnCount(usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -244,40 +246,35 @@ pub(crate) struct Table {
 
 impl Table {
     pub(crate) fn from_reader<R: Read + Seek>(
-        mut input: R,
+        input: R,
         config: &Delimiters,
     ) -> Result<Table, Error> {
-        let delimiters = match config.is_empty() {
-            false => Cow::Borrowed(config),
-            true => Cow::Owned(guess_format_from_reader(&mut input)?),
-        };
-        debug!("Final delimiters: {:?}", delimiters);
         let mut cols = Vec::new();
         let input = BufReader::new(input);
-        let result: Result<Vec<()>, Error> = input
-            .lines()
-            .filter_map(|l| l.ok())
-            .map(|r| r.trim_start_matches('\u{feff}').to_owned())
-            .map(|r| split_row(r.as_str(), &delimiters))
-            .filter(|r| !r.is_empty())
-            .map(|fields| {
-                if cols.is_empty() {
-                    cols.resize_with(fields.len(), Column::default);
-                }
-                if fields.len() != cols.len() {
-                    let message = format!("Skipping row due to inconsistent number of columns! First row had {}, this row has {} (row: {:?})",cols.len(), fields.len(), fields);
-                    warn!("{}", message.as_str());
-                } else {
-                    fields
-                        .into_iter()
-                        .zip(cols.iter_mut())
-                        .for_each(|(f, col)| col.rows.push(f));
-                }
-                Ok(())
-            }).collect();
+        info!("Setting up csv parser");
+        let mut parser = if config.is_empty() {
+            tokenizer::Tokenizer::new_guess_format(input)?
+        } else {
+            tokenizer::Tokenizer::new(input, config.clone()).ok_or(Error::FormatGuessingFailure)?
+        };
 
-        if result.is_err() {
-            warn!("Errors occurred during reading of the csv to a table!");
+        info!("Parsing the file");
+        parser.generate_tokens()?;
+
+        for (line_num, fields) in parser.into_lines_iter().enumerate() {
+            if cols.is_empty() {
+                cols.resize_with(fields.len(), Column::default);
+            }
+            if fields.len() != cols.len() {
+                let message = format!("Error: Columns inconsistent! First row had {}, this row has {} (row:{line_num})", cols.len(), fields.len());
+                error!("{}", message.as_str());
+                return Err(Error::UnstableColumnCount(line_num));
+            } else {
+                fields
+                    .into_iter()
+                    .zip(cols.iter_mut())
+                    .for_each(|(f, col)| col.rows.push(f));
+            }
         }
 
         Ok(Table { columns: cols })
@@ -360,20 +357,6 @@ pub(crate) fn compare_tables(
         }
     }
     Ok(diffs)
-}
-
-fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
-    if row.is_empty() {
-        return Vec::new();
-    }
-    if let Some(row_delimiter) = config.field_delimiter.as_ref() {
-        row.split(*row_delimiter)
-            .enumerate()
-            .map(|(_, field)| Value::from_str(field, &config.decimal_separator))
-            .collect()
-    } else {
-        vec![Value::from_str(row, &config.decimal_separator)]
-    }
 }
 
 fn both_quantity<'a>(
@@ -814,19 +797,6 @@ mod tests {
         assert!(Mode::Relative(1.0).in_tolerance(&nominal, &actual));
         assert!(Mode::Absolute(1.0).in_tolerance(&nominal, &actual));
         assert!(Mode::Ignore.in_tolerance(&nominal, &actual))
-    }
-
-    #[test]
-    fn no_delimiter_whole_row_is_field() {
-        let row = "my - cool - row - has - strange - delimiters";
-        let delimiters = Delimiters {
-            field_delimiter: None,
-            decimal_separator: None,
-        };
-        let split_result = split_row(row, &delimiters);
-        assert_eq!(split_result.len(), 1);
-        let value = split_result.first().unwrap();
-        assert_eq!(value.get_string().as_deref().unwrap(), row);
     }
 
     #[test]

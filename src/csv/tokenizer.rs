@@ -5,7 +5,7 @@ use itertools::Itertools;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek};
-use tracing::{debug, error, info};
+use tracing::{debug, info, warn};
 
 fn guess_format_from_line(
     line: &str,
@@ -95,9 +95,10 @@ pub(crate) fn guess_format_from_reader<R: Read + Seek>(
     input.rewind()?;
 
     if format.0.is_none() {
-        error!("Could not guess field delimiter, bailing out.");
-        return Err(Error::FormatGuessingFailure);
+        warn!("Could not guess field delimiter, setting to default");
+        format.0 = Delimiters::default().field_delimiter;
     }
+
     let delim = Delimiters {
         field_delimiter: format.0,
         decimal_separator: format.1,
@@ -195,7 +196,10 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
                     tokens.push(Token::Field(&remainder[..end_pos]));
                 }
                 SpecialCharacter::NewLine(_) => {
-                    tokens.push(Token::Field(&remainder[..end_pos]));
+                    let field_value = &remainder[..end_pos].trim();
+                    if !field_value.is_empty() {
+                        tokens.push(Token::Field(field_value));
+                    }
                     tokens.push(Token::LineBreak);
                 }
                 SpecialCharacter::Quote(_) => {
@@ -234,19 +238,25 @@ fn parse_literal<N: Fn(&str) -> Option<SpecialCharacter>>(
     let field_end = find_next_field_stop(inner_remainder, field_sep)
         .map(|sc| sc.get_position())
         .unwrap_or(inner_remainder.len());
-    let token = Token::Field(&remainder[..after_quote + field_end]);
-    Ok((token, after_quote + field_end))
+    let line_end = find_next_new_line(inner_remainder)
+        .map(|sc| sc.get_position())
+        .unwrap_or(inner_remainder.len());
+    if line_end < field_end {
+        let token = Token::Field(&remainder[..after_quote]);
+        Ok((token, after_quote))
+    } else {
+        let token = Token::Field(&remainder[..after_quote + field_end]);
+        Ok((token, after_quote + field_end))
+    }
 }
 
 impl<R: Read + Seek> Tokenizer<R> {
-    pub fn new_guess_format(mut reader: R) -> Option<Self> {
-        guess_format_from_reader(&mut reader)
-            .ok()
-            .map(|delimiters| Tokenizer {
-                reader,
-                delimiters,
-                line_buffer: Vec::new(),
-            })
+    pub fn new_guess_format(mut reader: R) -> Result<Self, Error> {
+        guess_format_from_reader(&mut reader).map(|delimiters| Tokenizer {
+            reader,
+            delimiters,
+            line_buffer: Vec::new(),
+        })
     }
 
     pub fn new(reader: R, delimiters: Delimiters) -> Option<Self> {
@@ -258,7 +268,7 @@ impl<R: Read + Seek> Tokenizer<R> {
         })
     }
 
-    fn generate_tokens(&mut self) -> Result<(), Error> {
+    pub fn generate_tokens(&mut self) -> Result<(), Error> {
         let mut string_buffer = String::new();
         self.reader.read_to_string(&mut string_buffer)?;
         let string_buffer = string_buffer.trim_start_matches('\u{feff}');
@@ -280,11 +290,20 @@ impl<R: Read + Seek> Tokenizer<R> {
                 Token::LineBreak => buffer.push(Vec::new()),
             }
         }
+        'RemoveEmpty: loop {
+            if let Some(back) = buffer.last() {
+                if back.is_empty() {
+                    buffer.pop();
+                } else {
+                    break 'RemoveEmpty;
+                }
+            }
+        }
         self.line_buffer = buffer;
         Ok(())
     }
 
-    fn into_lines_iter(self) -> impl Iterator<Item = Vec<Value>> {
+    pub(crate) fn into_lines_iter(self) -> impl Iterator<Item = Vec<Value>> {
         self.line_buffer.into_iter()
     }
 }
@@ -292,6 +311,8 @@ impl<R: Read + Seek> Tokenizer<R> {
 #[cfg(test)]
 mod tokenizer_tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Cursor;
 
     #[test]
     fn unescaped() {
@@ -343,6 +364,16 @@ mod tokenizer_tests {
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla\nbla\""));
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
     }
+
+    #[test]
+    fn tokenize_to_values_cuts_last_nl() {
+        let str = "bla\n2.0\n\n";
+        let mut parser = Tokenizer::new_guess_format(Cursor::new(str)).unwrap();
+        parser.generate_tokens().unwrap();
+        let lines: Vec<_> = parser.into_lines_iter().collect();
+        assert_eq!(lines.len(), 2);
+    }
+
     #[test]
     fn tokenization_with_multi_line_with_escape_break_literals() {
         let str = "\\\"bla,\"'bla\\\"\nbla'\",2.0";
@@ -363,6 +394,23 @@ mod tokenizer_tests {
         assert_eq!(tokens.pop().unwrap(), Token::LineBreak);
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+    }
+
+    #[test]
+    fn tokenizer_smoke() {
+        let actual = File::open(
+            "tests/integ/data/display_of_status_message_in_cm_tables/actual/Volume1.csv",
+        )
+        .unwrap();
+        let mut parser = Tokenizer::new_guess_format(actual).unwrap();
+        parser.generate_tokens().unwrap();
+
+        let nominal = File::open(
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
+        )
+        .unwrap();
+        let mut parser = Tokenizer::new_guess_format(nominal).unwrap();
+        parser.generate_tokens().unwrap();
     }
 }
 
@@ -461,7 +509,7 @@ mod format_guessing_tests {
         assert_eq!(
             format,
             Delimiters {
-                field_delimiter: None,
+                field_delimiter: Some(','),
                 decimal_separator: Some('.')
             }
         );
