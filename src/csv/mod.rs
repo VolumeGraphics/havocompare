@@ -244,9 +244,9 @@ impl Table {
         let input = BufReader::new(input);
         info!("Setting up csv parser");
         let mut parser = if config.is_empty() {
-            tokenizer::Tokenizer::new_guess_format(input)?
+            tokenizer::Parser::new_guess_format(input)?
         } else {
-            tokenizer::Tokenizer::new(input, config.clone()).ok_or(Error::FormatGuessingFailure)?
+            tokenizer::Parser::new(input, config.clone()).ok_or(Error::FormatGuessingFailure)?
         };
 
         info!("Parsing the file");
