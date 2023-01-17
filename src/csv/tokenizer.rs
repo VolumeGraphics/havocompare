@@ -3,7 +3,7 @@ use crate::csv::value::Value;
 use crate::csv::Delimiters;
 use itertools::Itertools;
 use regex::Regex;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek};
 use tracing::{debug, error, info};
 
@@ -139,7 +139,6 @@ fn find_next_char_unescaped(string: &str, pat: char) -> Option<usize> {
     if let Some(pos) = pos {
         if pos > 0 && &string[pos - 1..pos] == "\\" {
             let remainder = &string[pos + 1..];
-            println!("Running remainder search: {}", remainder);
             return find_next_char_unescaped(remainder, pat).map(|ipos| ipos + pos + 1);
         }
         Some(pos)
@@ -200,28 +199,16 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
                     tokens.push(Token::LineBreak);
                 }
                 SpecialCharacter::Quote(_) => {
-                    let after_first_quote = &remainder[1..];
-                    let quote_end =
-                        find_next_quote(after_first_quote).ok_or(Error::UnterminatedLiteral)?;
-                    let after_quote = quote_end.get_position() + 1;
-                    let inner_remainder = &remainder[after_quote..];
-                    let field_end = find_next_field_stop(inner_remainder, field_sep)
-                        .map(|sc| sc.get_position())
-                        .unwrap_or(inner_remainder.len());
-                    tokens.push(Token::Field(&remainder[..after_quote + field_end]));
-                    end_pos += after_quote + field_end;
+                    let (token, literal_end_pos) =
+                        parse_literal(field_sep, remainder, find_next_quote)?;
+                    end_pos += literal_end_pos;
+                    tokens.push(token);
                 }
                 SpecialCharacter::Tick(_) => {
-                    let after_first_quote = &remainder[1..];
-                    let quote_end =
-                        find_next_tick(after_first_quote).ok_or(Error::UnterminatedLiteral)?;
-                    let after_quote = quote_end.get_position() + 1;
-                    let inner_remainder = &remainder[after_quote..];
-                    let field_end = find_next_field_stop(inner_remainder, field_sep)
-                        .map(|sc| sc.get_position())
-                        .unwrap_or(inner_remainder.len());
-                    tokens.push(Token::Field(&remainder[..after_quote + field_end]));
-                    end_pos += after_quote + field_end;
+                    let (token, literal_end_pos) =
+                        parse_literal(field_sep, remainder, find_next_tick)?;
+                    end_pos += literal_end_pos;
+                    tokens.push(token);
                 }
             };
             pos += end_pos + 1;
@@ -233,6 +220,22 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
         tokens.push(Token::Field(&input[pos..]));
     }
     Ok(tokens)
+}
+
+fn parse_literal<N: Fn(&str) -> Option<SpecialCharacter>>(
+    field_sep: char,
+    remainder: &str,
+    literal_stop_finder: N,
+) -> Result<(Token, usize), Error> {
+    let after_first_quote = &remainder[1..];
+    let quote_end = literal_stop_finder(after_first_quote).ok_or(Error::UnterminatedLiteral)?;
+    let after_quote = quote_end.get_position() + 1;
+    let inner_remainder = &remainder[after_quote..];
+    let field_end = find_next_field_stop(inner_remainder, field_sep)
+        .map(|sc| sc.get_position())
+        .unwrap_or(inner_remainder.len());
+    let token = Token::Field(&remainder[..after_quote + field_end]);
+    Ok((token, after_quote + field_end))
 }
 
 impl<R: Read + Seek> Tokenizer<R> {
@@ -354,7 +357,6 @@ mod tokenizer_tests {
     fn tokenization_new_lines() {
         let str = "bla,bla\nbla,bla";
         let mut tokens = generate_tokens(str, ',').unwrap();
-        println!("{:?}", tokens);
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
