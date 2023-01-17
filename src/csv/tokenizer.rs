@@ -269,6 +269,11 @@ impl<R: Read + Seek> Tokenizer<R> {
     }
 
     pub fn generate_tokens(&mut self) -> Result<(), Error> {
+        info!(
+            "Generating tokens with field delimiter: {:?}",
+            self.delimiters.field_delimiter
+        );
+
         let mut string_buffer = String::new();
         self.reader.read_to_string(&mut string_buffer)?;
         let string_buffer = string_buffer.trim_start_matches('\u{feff}');
@@ -412,6 +417,17 @@ mod tokenizer_tests {
         let mut parser = Tokenizer::new_guess_format(nominal).unwrap();
         parser.generate_tokens().unwrap();
     }
+
+    #[test]
+    fn tokenizer_semicolon_test() {
+        let nominal =
+            File::open("tests/csv/data/easy_pore_export_annoration_table_result.csv").unwrap();
+        let mut parser = Tokenizer::new_guess_format(nominal).unwrap();
+        parser.generate_tokens().unwrap();
+        for line in parser.into_lines_iter() {
+            assert_eq!(line.len(), 5);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -509,7 +525,7 @@ mod format_guessing_tests {
         assert_eq!(
             format,
             Delimiters {
-                field_delimiter: Some(','),
+                field_delimiter: None,
                 decimal_separator: Some('.')
             }
         );
@@ -523,6 +539,19 @@ mod format_guessing_tests {
             .unwrap(),
         )
         .unwrap();
+        assert_eq!(
+            format,
+            Delimiters {
+                field_delimiter: Some(';'),
+                decimal_separator: Some(',')
+            }
+        );
+    }
+    #[test]
+    fn format_detection_from_file_semicolon_separators() {
+        let format =
+            guess_format_from_reader(&mut File::open("tests/csv/data/Components.csv").unwrap())
+                .unwrap();
         assert_eq!(
             format,
             Delimiters {

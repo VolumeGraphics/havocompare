@@ -194,22 +194,13 @@ pub struct CSVCompareConfig {
     pub preprocessing: Option<Vec<Preprocessor>>,
 }
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
 /// Delimiter configuration for file parsing
 pub struct Delimiters {
     /// The delimiters of the csv fields (typically comma, semicolon or pipe)
     pub field_delimiter: Option<char>,
     /// The decimal separator for floating point numbers (typically dot or comma)
     pub decimal_separator: Option<char>,
-}
-
-impl Default for Delimiters {
-    fn default() -> Self {
-        Delimiters {
-            field_delimiter: Some(','),
-            decimal_separator: Some('.'),
-        }
-    }
 }
 
 impl Delimiters {

@@ -137,14 +137,21 @@ fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
 
 fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
     debug!("Extracting headers...");
+    let can_extract = table
+        .columns
+        .iter()
+        .all(|c| matches!(c.rows.first(), Some(Value::String(_))));
+    if !can_extract {
+        warn!("Cannot extract header for this csv!");
+        return Ok(());
+    }
+
     for col in table.columns.iter_mut() {
         let title = col.rows.drain(0..1).next().ok_or_else(|| {
             csv::Error::InvalidAccess("Tried to extract header of empty column!".to_string())
         })?;
         if let Value::String(title) = title {
             col.header = Some(title);
-        } else {
-            warn!("First entry in column was not a string!");
         }
     }
     Ok(())
