@@ -250,9 +250,8 @@ impl Table {
         };
 
         info!("Parsing the file");
-        parser.generate_tokens()?;
 
-        for (line_num, fields) in parser.into_lines_iter().enumerate() {
+        for (line_num, fields) in parser.parse_to_rows()?.enumerate() {
             if cols.is_empty() {
                 cols.resize_with(fields.len(), Column::default);
             }

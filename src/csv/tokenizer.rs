@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek};
 use tracing::{debug, info, warn};
 
+const BOM: char = '\u{feff}';
+const DEFAULT_FIELD_SEPARATOR: char = ',';
+
 fn guess_format_from_line(
     line: &str,
     field_separator_hint: Option<char>,
@@ -178,13 +181,46 @@ fn find_next_special_char(string: &str, field_sep: char) -> Option<SpecialCharac
         .next()
 }
 
+struct Rows(Vec<Vec<Value>>);
+impl Rows {
+    pub fn new() -> Rows {
+        Rows(vec![Vec::new()])
+    }
+
+    pub fn add_field(&mut self, value: Value) {
+        if let Some(current_row) = self.0.last_mut() {
+            current_row.push(value);
+        }
+    }
+
+    pub fn new_row(&mut self) {
+        self.0.push(Vec::new());
+    }
+
+    pub fn into_iter(mut self) -> std::vec::IntoIter<Vec<Value>> {
+        self.finalize();
+        self.0.into_iter()
+    }
+
+    fn finalize(&mut self) {
+        'RemoveEmpty: loop {
+            if let Some(back) = self.0.last() {
+                if back.is_empty() {
+                    self.0.pop();
+                } else {
+                    break 'RemoveEmpty;
+                }
+            }
+        }
+    }
+}
+
 pub(crate) struct Tokenizer<R: Read + Seek> {
     reader: R,
     delimiters: Delimiters,
-    line_buffer: Vec<Vec<Value>>,
 }
 
-fn generate_tokens(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
+fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
     let mut tokens = Vec::new();
     let mut pos = 0;
     loop {
@@ -252,23 +288,15 @@ fn parse_literal<N: Fn(&str) -> Option<SpecialCharacter>>(
 
 impl<R: Read + Seek> Tokenizer<R> {
     pub fn new_guess_format(mut reader: R) -> Result<Self, Error> {
-        guess_format_from_reader(&mut reader).map(|delimiters| Tokenizer {
-            reader,
-            delimiters,
-            line_buffer: Vec::new(),
-        })
+        guess_format_from_reader(&mut reader).map(|delimiters| Tokenizer { reader, delimiters })
     }
 
     pub fn new(reader: R, delimiters: Delimiters) -> Option<Self> {
         delimiters.field_delimiter?;
-        Some(Tokenizer {
-            reader,
-            delimiters,
-            line_buffer: Vec::new(),
-        })
+        Some(Tokenizer { reader, delimiters })
     }
 
-    pub fn generate_tokens(&mut self) -> Result<(), Error> {
+    pub(crate) fn parse_to_rows(&mut self) -> Result<std::vec::IntoIter<Vec<Value>>, Error> {
         info!(
             "Generating tokens with field delimiter: {:?}",
             self.delimiters.field_delimiter
@@ -276,40 +304,30 @@ impl<R: Read + Seek> Tokenizer<R> {
 
         let mut string_buffer = String::new();
         self.reader.read_to_string(&mut string_buffer)?;
-        let string_buffer = string_buffer.trim_start_matches('\u{feff}');
+        // remove BoM
+        let string_buffer = string_buffer.trim_start_matches(BOM);
+        // windows line endings to linux line endings
         let string_buffer = string_buffer.replace('\r', "");
-        let field_sep = self.delimiters.field_delimiter.unwrap_or(',');
-        let tokens = generate_tokens(string_buffer.as_str(), field_sep)?;
-        let mut buffer = Vec::new();
-        buffer.push(Vec::new());
+
+        let field_sep = self
+            .delimiters
+            .field_delimiter
+            .unwrap_or(DEFAULT_FIELD_SEPARATOR);
+        let tokens = tokenize(string_buffer.as_str(), field_sep)?;
+        let mut buffer = Rows::new();
         for token in tokens.into_iter() {
             match token {
                 Token::Field(input_str) => {
-                    if let Some(current_line) = buffer.last_mut() {
-                        current_line.push(Value::from_str(
-                            input_str,
-                            &self.delimiters.decimal_separator,
-                        ));
-                    }
+                    buffer.add_field(Value::from_str(
+                        input_str,
+                        &self.delimiters.decimal_separator,
+                    ));
                 }
-                Token::LineBreak => buffer.push(Vec::new()),
+                Token::LineBreak => buffer.new_row(),
             }
         }
-        'RemoveEmpty: loop {
-            if let Some(back) = buffer.last() {
-                if back.is_empty() {
-                    buffer.pop();
-                } else {
-                    break 'RemoveEmpty;
-                }
-            }
-        }
-        self.line_buffer = buffer;
-        Ok(())
-    }
 
-    pub(crate) fn into_lines_iter(self) -> impl Iterator<Item = Vec<Value>> {
-        self.line_buffer.into_iter()
+        Ok(buffer.into_iter())
     }
 }
 
@@ -343,7 +361,7 @@ mod tokenizer_tests {
     #[test]
     fn tokenization_simple() {
         let str = "bla,blubb,2.0";
-        let mut tokens = generate_tokens(str, ',').unwrap();
+        let mut tokens = tokenize(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("blubb"));
@@ -353,7 +371,7 @@ mod tokenizer_tests {
     #[test]
     fn tokenization_with_literals() {
         let str = "bla,\"bla,bla\",2.0";
-        let mut tokens = generate_tokens(str, ',').unwrap();
+        let mut tokens = tokenize(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla,bla\""));
@@ -363,7 +381,7 @@ mod tokenizer_tests {
     #[test]
     fn tokenization_with_multi_line_literals() {
         let str = "bla,\"bla\nbla\",2.0";
-        let mut tokens = generate_tokens(str, ',').unwrap();
+        let mut tokens = tokenize(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla\nbla\""));
@@ -374,15 +392,13 @@ mod tokenizer_tests {
     fn tokenize_to_values_cuts_last_nl() {
         let str = "bla\n2.0\n\n";
         let mut parser = Tokenizer::new_guess_format(Cursor::new(str)).unwrap();
-        parser.generate_tokens().unwrap();
-        let lines: Vec<_> = parser.into_lines_iter().collect();
-        assert_eq!(lines.len(), 2);
+        assert_eq!(parser.parse_to_rows().unwrap().len(), 2);
     }
 
     #[test]
     fn tokenization_with_multi_line_with_escape_break_literals() {
         let str = "\\\"bla,\"'bla\\\"\nbla'\",2.0";
-        let mut tokens = generate_tokens(str, ',').unwrap();
+        let mut tokens = tokenize(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"'bla\\\"\nbla'\""));
@@ -392,7 +408,7 @@ mod tokenizer_tests {
     #[test]
     fn tokenization_new_lines() {
         let str = "bla,bla\nbla,bla";
-        let mut tokens = generate_tokens(str, ',').unwrap();
+        let mut tokens = tokenize(str, ',').unwrap();
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
@@ -408,14 +424,13 @@ mod tokenizer_tests {
         )
         .unwrap();
         let mut parser = Tokenizer::new_guess_format(actual).unwrap();
-        parser.generate_tokens().unwrap();
-
+        parser.parse_to_rows().unwrap();
         let nominal = File::open(
             "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
         )
         .unwrap();
         let mut parser = Tokenizer::new_guess_format(nominal).unwrap();
-        parser.generate_tokens().unwrap();
+        parser.parse_to_rows().unwrap();
     }
 
     #[test]
@@ -423,8 +438,7 @@ mod tokenizer_tests {
         let nominal =
             File::open("tests/csv/data/easy_pore_export_annoration_table_result.csv").unwrap();
         let mut parser = Tokenizer::new_guess_format(nominal).unwrap();
-        parser.generate_tokens().unwrap();
-        for line in parser.into_lines_iter() {
+        for line in parser.parse_to_rows().unwrap() {
             assert_eq!(line.len(), 5);
         }
     }
