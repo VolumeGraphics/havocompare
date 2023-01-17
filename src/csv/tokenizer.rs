@@ -1,4 +1,5 @@
 use super::Error;
+use crate::csv::value::Value;
 use crate::csv::Delimiters;
 use itertools::Itertools;
 use regex::Regex;
@@ -109,8 +110,8 @@ pub(crate) fn guess_format_from_reader<R: Read + Seek>(
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum Token {
-    Field(String),
+pub enum Token<'a> {
+    Field(&'a str),
     LineBreak,
 }
 
@@ -180,11 +181,11 @@ fn find_next_special_char(string: &str, field_sep: char) -> Option<SpecialCharac
 pub(crate) struct Tokenizer<R: Read + Seek> {
     reader: R,
     delimiters: Delimiters,
-    buffer: VecDeque<Token>,
+    line_buffer: Vec<Vec<Value>>,
 }
 
-fn generate_tokens(input: &str, field_sep: char) -> Result<VecDeque<Token>, Error> {
-    let mut tokens = VecDeque::new();
+fn generate_tokens(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
+    let mut tokens = Vec::new();
     let mut pos = 0;
     loop {
         let remainder = &input[pos..];
@@ -192,11 +193,11 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<VecDeque<Token>, Erro
             let mut end_pos = special_char.get_position();
             match special_char {
                 SpecialCharacter::FieldStop(_) => {
-                    tokens.push_back(Token::Field(remainder[..end_pos].to_string()));
+                    tokens.push(Token::Field(&remainder[..end_pos]));
                 }
                 SpecialCharacter::NewLine(_) => {
-                    tokens.push_back(Token::Field(remainder[..end_pos].to_string()));
-                    tokens.push_back(Token::LineBreak);
+                    tokens.push(Token::Field(&remainder[..end_pos]));
+                    tokens.push(Token::LineBreak);
                 }
                 SpecialCharacter::Quote(_) => {
                     let after_first_quote = &remainder[1..];
@@ -207,9 +208,7 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<VecDeque<Token>, Erro
                     let field_end = find_next_field_stop(inner_remainder, field_sep)
                         .map(|sc| sc.get_position())
                         .unwrap_or(inner_remainder.len());
-                    tokens.push_back(Token::Field(
-                        remainder[..after_quote + field_end].to_string(),
-                    ));
+                    tokens.push(Token::Field(&remainder[..after_quote + field_end]));
                     end_pos += after_quote + field_end;
                 }
                 SpecialCharacter::Tick(_) => {
@@ -221,9 +220,7 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<VecDeque<Token>, Erro
                     let field_end = find_next_field_stop(inner_remainder, field_sep)
                         .map(|sc| sc.get_position())
                         .unwrap_or(inner_remainder.len());
-                    tokens.push_back(Token::Field(
-                        remainder[..after_quote + field_end].to_string(),
-                    ));
+                    tokens.push(Token::Field(&remainder[..after_quote + field_end]));
                     end_pos += after_quote + field_end;
                 }
             };
@@ -233,7 +230,7 @@ fn generate_tokens(input: &str, field_sep: char) -> Result<VecDeque<Token>, Erro
         }
     }
     if pos < input.len() {
-        tokens.push_back(Token::Field(input[pos..].to_string()));
+        tokens.push(Token::Field(&input[pos..]));
     }
     Ok(tokens)
 }
@@ -245,7 +242,7 @@ impl<R: Read + Seek> Tokenizer<R> {
             .map(|delimiters| Tokenizer {
                 reader,
                 delimiters,
-                buffer: VecDeque::new(),
+                line_buffer: Vec::new(),
             })
     }
 
@@ -254,7 +251,7 @@ impl<R: Read + Seek> Tokenizer<R> {
         Some(Tokenizer {
             reader,
             delimiters,
-            buffer: VecDeque::new(),
+            line_buffer: Vec::new(),
         })
     }
 
@@ -264,8 +261,28 @@ impl<R: Read + Seek> Tokenizer<R> {
         let string_buffer = string_buffer.trim_start_matches('\u{feff}');
         let string_buffer = string_buffer.replace('\r', "");
         let field_sep = self.delimiters.field_delimiter.unwrap_or(',');
-        self.buffer = generate_tokens(string_buffer.as_str(), field_sep)?;
+        let tokens = generate_tokens(string_buffer.as_str(), field_sep)?;
+        let mut buffer = Vec::new();
+        buffer.push(Vec::new());
+        for token in tokens.into_iter() {
+            match token {
+                Token::Field(input_str) => {
+                    if let Some(current_line) = buffer.last_mut() {
+                        current_line.push(Value::from_str(
+                            input_str,
+                            &self.delimiters.decimal_separator,
+                        ));
+                    }
+                }
+                Token::LineBreak => buffer.push(Vec::new()),
+            }
+        }
+        self.line_buffer = buffer;
         Ok(())
+    }
+
+    fn into_lines_iter(self) -> impl Iterator<Item = Vec<Value>> {
+        self.line_buffer.into_iter()
     }
 }
 
@@ -299,12 +316,9 @@ mod tokenizer_tests {
         let str = "bla,blubb,2.0";
         let mut tokens = generate_tokens(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
-        assert_eq!(
-            tokens.pop_front().unwrap(),
-            Token::Field("blubb".to_owned())
-        );
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("2.0".to_owned()));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("blubb"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
     }
 
     #[test]
@@ -312,12 +326,9 @@ mod tokenizer_tests {
         let str = "bla,\"bla,bla\",2.0";
         let mut tokens = generate_tokens(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
-        assert_eq!(
-            tokens.pop_front().unwrap(),
-            Token::Field("\"bla,bla\"".to_owned())
-        );
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("2.0".to_owned()));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla,bla\""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
     }
 
     #[test]
@@ -325,27 +336,18 @@ mod tokenizer_tests {
         let str = "bla,\"bla\nbla\",2.0";
         let mut tokens = generate_tokens(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
-        assert_eq!(
-            tokens.pop_front().unwrap(),
-            Token::Field("\"bla\nbla\"".to_owned())
-        );
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("2.0".to_owned()));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla\nbla\""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
     }
     #[test]
     fn tokenization_with_multi_line_with_escape_break_literals() {
         let str = "\\\"bla,\"'bla\\\"\nbla'\",2.0";
         let mut tokens = generate_tokens(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
-        assert_eq!(
-            tokens.pop_front().unwrap(),
-            Token::Field("\\\"bla".to_owned())
-        );
-        assert_eq!(
-            tokens.pop_front().unwrap(),
-            Token::Field("\"'bla\\\"\nbla'\"".to_owned())
-        );
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("2.0".to_owned()));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("\"'bla\\\"\nbla'\""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("\\\"bla"));
     }
 
     #[test]
@@ -354,11 +356,11 @@ mod tokenizer_tests {
         let mut tokens = generate_tokens(str, ',').unwrap();
         println!("{:?}", tokens);
         assert_eq!(tokens.len(), 5);
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
-        assert_eq!(tokens.pop_front().unwrap(), Token::LineBreak);
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
-        assert_eq!(tokens.pop_front().unwrap(), Token::Field("bla".to_owned()));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+        assert_eq!(tokens.pop().unwrap(), Token::LineBreak);
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
     }
 }
 
