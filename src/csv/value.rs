@@ -41,7 +41,7 @@ impl Display for Value {
                 write!(f, "{}", val).unwrap();
             }
             Value::String(val) => {
-                write!(f, "'{}'s", val).unwrap();
+                write!(f, "'{}'", val).unwrap();
             }
         }
         Ok(())

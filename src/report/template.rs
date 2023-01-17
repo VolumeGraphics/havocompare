@@ -8,18 +8,11 @@ pub const INDEX_TEMPLATE: &str = r###"
     <title>Report</title>
      <style>
 
-        table.dataTable tr.odd {
-            background-color: #dddddd;
+        .error {
+            background-color: #fbcccc !important;
+            color:red;
         }
 
-        table {
-		  table-layout: fixed;
-		}
-		
-        .error {
-            background-color: #FF4646 !important;
-        }
-        
         h3 {
 			background-color:black;
 			color:white;
@@ -32,6 +25,15 @@ pub const INDEX_TEMPLATE: &str = r###"
 			padding:10px;
 		}
 
+		.dataTables_wrapper {
+			font-family: monospace;
+    		font-size: 10pt;
+		}
+
+		table.dataTable tbody td {
+			padding:0px 0px !important;
+		}
+
     </style>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
 </head>
@@ -41,24 +43,24 @@ pub const INDEX_TEMPLATE: &str = r###"
 {% for rule_report in rule_results %}
 	<h3>{{ rule_report.rule.name }}</h3>
 	<div class="container">
-	<table class="report">
+	<table class="report cell-border">
 		<thead>
 		<tr>
-			<th>Nominal</th>
-			<th>Actual</th>
-			<th></th>
+			<th>File</th>
+			<th>Result</th>
 		</tr>
 		</thead>
 		<tbody>
 			{% for file in rule_report.compare_results %}
 				<tr {% if file.is_error %} class="error" {% endif %}>
-					<td>{{ file.nominal }}</td>
-					<td>{{ file.actual }}</td>
 					<td>
 						{% if file.detail_path %}
-							<a href="./{{ rule_report.rule.name }}/{{ file.detail_path }}/{{ detail_filename }}">View Detail(s)</a>
+							<a href="./{{ rule_report.rule.name }}/{{ file.detail_path }}/{{ detail_filename }}">{{ file.actual }}</a>
+						{% else %}
+							{{ file.actual }}
 						{% endif %}
 					</td>
+					<td>{% if file.is_error %} <span>&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
 				</tr>
 			{% endfor %}
 		</tbody>
@@ -222,7 +224,7 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Error(s)</title>
+    <title>Results</title>
      <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
      
      <style>
@@ -235,68 +237,100 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 			cursor:pointer;
 		}
 
-        table.dataTable tr.odd {
-            background-color: #dddddd;
-        }
-        
-        table {
-		  table-layout: fixed;
-		}
-
-
 		.actual {
 			color: #0d6efdf0;
 		}
 		
 		.diffs {
 			color: #FF4646;
-			font-size:12px;
 		}
 		
 		table.dataTable {
 			border: 1px solid #999999;
+		}
+
+		.dataTables_wrapper {
+			font-family: monospace;
+    		font-size: 10pt;
 		}
 		
 		table.dataTable th:not(:last-child), table.dataTable td:not(:last-child) {
 			border-right: 1px solid #999999;
 		}
 
+		.error {
+            background-color: #fbcccc !important;
+        }
+
+        table.dataTable td, table.dataTable th {
+			white-space:nowrap;
+		}
+
+		table.dataTable tbody td, table.dataTable thead th {
+			padding:0px 0px;
+		}
+
     </style>
 </head>
 <body>
 
-<h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
+<h3>Compare Result</h3>
+<p>
+	<table>
+		<tbody>
+			<tr>
+				<td>Left file (nominal):</td>
+				<td>{{ nominal }}</td>
+			</tr>
+				<tr>
+				<td>Right file (actual):</td>
+				<td>{{ actual }}</td>
+			</tr>
+		</tbody>
+	</table>
+</p>
 
-<table id="report">
+{% if headers.columns|length <= 0 %}
+	<p><i>Header preprocessing not enabled in config</i></p>
+{% endif %}
+<table id="report" class="cell-border">
     <thead>
-    <tr>
-	    <th>Row</th>
-		{% for col in headers %}
-			<th>
-				{{ col.actual_value }}
-				{% if col.nominal_value != col.actual_value %}
-					<div class="actual"> nominal: {{ col.nominal_value }}</span>
-				{% endif %}
-				{% for diff in col.diffs %}
-					<div class="diffs">{{ diff }}</div>
-				{% endfor %}
-			</th>
-		{% endfor %}
-    </tr>
+    {% if headers.columns|length > 0 %}
+    	<tr>
+	    	<th>1{% if headers.has_diff %}<br>&nbsp;{% endif %}</th>
+	    	<th>{% if headers.has_diff %}&nbsp;<br>{% endif %}1</th>
+			{% for col in headers.columns %}
+				<th>
+					{{ col.nominal_value }}
+					{% if headers.has_diff %}
+						<div class="{% if col.nominal_value != col.actual_value %} actual {% endif %}">{{ col.actual_value }}</div>
+					{% endif %}
+				</th>
+			{% endfor %}
+		</tr>
+    {% else %}
+	    <tr>
+	    	<th>&nbsp;</th>
+	    	<th>&nbsp;</th>
+	    	{% for col in rows[0].columns %}
+		    	<th>&nbsp;</th>
+	    	{% endfor %}
+	    </tr>
+    {% endif %}
     </thead>
     <tbody>
-        {% for cols in rows %}
-            <tr>
-            	<td>{{ loop.index }}</td>
-            	{% for col in cols %}
+        {% for row in rows %}
+            <tr {% if row.has_error %} class="error" {% endif %}>
+            	<td data-order="{{ loop.index }}">{{ loop.index + row_index_increment }}{% if row.has_diff or row.has_error %}<br>&nbsp;{% endif %}</td>
+            	<td data-order="{{ loop.index }}">{% if row.has_diff or row.has_error %}&nbsp;<br>{% endif %}{{ loop.index + row_index_increment }}</td>
+            	{% for col in row.columns %}
 					<td>
-					{{ col.actual_value }}
-					{% if col.nominal_value != col.actual_value %}
-						<div class="actual">nominal: {{ col.nominal_value }}</span>
+					{{ col.nominal_value }}
+					{% if row.has_diff or row.has_error %}
+						<div class="{% if col.diffs|length > 0 %} diffs {% elif col.nominal_value != col.actual_value %} actual {% else %} {% endif %}">
+						{{ col.actual_value }}
+						</div>
 					{% endif %}
-					{% for diff in col.diffs %}
-						<div class="diffs">{{ diff }}</div>
-					{% endfor %}
                 	 </td>
                 {% endfor %}
             </tr>
@@ -310,7 +344,13 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
     document.addEventListener('DOMContentLoaded', function () {
         let table = new DataTable('#report', {
 			lengthMenu: [ [5, 10, 25, 50, -1], [5, 10, 25, 50, "All"] ],
-			iDisplayLength: -1
+			iDisplayLength: -1,
+			columnDefs: [
+    			{ type: "num", "targets": 0 },
+    			{ type: "num", "targets": 1 }
+			],
+			bPaginate: false,
+    		bLengthChange: false,
 		});
     });
 </script>
@@ -324,7 +364,7 @@ pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r###"
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Error(s)</title>
+    <title>Results</title>
      <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
 
      <style>
