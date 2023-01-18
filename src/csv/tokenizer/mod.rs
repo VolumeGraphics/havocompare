@@ -157,8 +157,16 @@ impl RowBuffer {
     fn trim_end(&mut self) {
         'PopEmpty: loop {
             if let Some(back) = self.0.last() {
-                if back.is_empty() {
-                    self.0.pop();
+                if back.len() <= 1 {
+                    if let Some(first) = back.first() {
+                        if first.as_str().is_empty() {
+                            self.0.pop();
+                        } else {
+                            break 'PopEmpty;
+                        }
+                    } else {
+                        self.0.pop();
+                    }
                 } else {
                     break 'PopEmpty;
                 }
@@ -178,21 +186,23 @@ fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
     while let Some(remainder) = &input.get(pos..) {
         if let Some(special_char) = find_special_char(remainder, field_sep) {
             let mut end_pos = special_char.get_position();
-            match special_char {
+            match &special_char {
                 SpecialCharacter::FieldStop(_, _) => {
                     tokens.push(Token::Field(&remainder[..end_pos]));
                 }
                 SpecialCharacter::NewLine(_) => {
                     let field_value = &remainder[..end_pos].trim();
-                    if !field_value.is_empty() {
-                        tokens.push(Token::Field(field_value));
-                    }
+                    tokens.push(Token::Field(field_value));
                     tokens.push(Token::LineBreak);
                 }
                 SpecialCharacter::LiteralMarker(_, terminator) => {
-                    let (token, literal_end_pos) = parse_literal(field_sep, remainder, terminator)?;
-                    end_pos += literal_end_pos;
+                    let (literal_end_pos, token, break_line) =
+                        parse_literal(field_sep, remainder, *terminator)?;
                     tokens.push(token);
+                    if break_line {
+                        tokens.push(Token::LineBreak);
+                    }
+                    end_pos += literal_end_pos;
                 }
             };
             pos += end_pos + special_char.len();
@@ -201,7 +211,7 @@ fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
         }
     }
 
-    if pos < input.len() {
+    if pos <= input.len() {
         tokens.push(Token::Field(&input[pos..]));
     }
     Ok(tokens)
@@ -211,7 +221,7 @@ fn parse_literal(
     field_sep: char,
     remainder: &str,
     literal_type: LiteralTerminator,
-) -> Result<(Token, usize), Error> {
+) -> Result<(usize, Token, bool), Error> {
     let terminator_len = literal_type.get_char().len_utf8();
     let after_first_quote = &remainder[terminator_len..];
     let quote_end =
@@ -226,10 +236,10 @@ fn parse_literal(
         .unwrap_or(inner_remainder.len());
     if line_end < field_end {
         let token = Token::Field(&remainder[..after_second_quote_in_remainder]);
-        Ok((token, after_second_quote_in_remainder - terminator_len))
+        Ok((after_second_quote_in_remainder, token, true))
     } else {
         let token = Token::Field(&remainder[..after_second_quote_in_remainder + field_end]);
-        Ok((token, after_second_quote_in_remainder + field_end))
+        Ok((after_second_quote_in_remainder + field_end, token, false))
     }
 }
 
@@ -315,6 +325,18 @@ mod tokenizer_tests {
     }
 
     #[test]
+    fn tokenization_simple_last_field_empty() {
+        let str = "bla,\nblubb,";
+        let mut tokens = tokenize(str, ',').unwrap();
+        assert_eq!(tokens.len(), 5);
+        assert_eq!(tokens.pop().unwrap(), Token::Field(""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("blubb"));
+        assert_eq!(tokens.pop().unwrap(), Token::LineBreak);
+        assert_eq!(tokens.pop().unwrap(), Token::Field(""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+    }
+
+    #[test]
     fn tokenization_with_literals() {
         let str = r#"bla,"bla,bla",2.0"#;
         let mut tokens = tokenize(str, ',').unwrap();
@@ -366,7 +388,8 @@ bla,bla"#;
     fn tokenize_to_values_cuts_last_nl() {
         let str = "bla\n2.0\n\n";
         let mut parser = Parser::new_guess_format(Cursor::new(str)).unwrap();
-        assert_eq!(parser.parse_to_rows().unwrap().len(), 2);
+        let lines: Vec<_> = parser.parse_to_rows().unwrap().collect();
+        assert_eq!(lines.len(), 2);
     }
 
     #[test]

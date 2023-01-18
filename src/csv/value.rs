@@ -1,5 +1,6 @@
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, JsonSchema, Deserialize, Serialize, PartialEq)]
@@ -90,6 +91,13 @@ impl Value {
         match self {
             Value::String(string) => Some(string.to_owned()),
             _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Cow<str> {
+        match self {
+            Value::String(str) => str.as_str().into(),
+            Value::Quantity(quant) => quant.to_string().into(),
         }
     }
 }
