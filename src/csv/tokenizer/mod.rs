@@ -22,22 +22,48 @@ pub enum Token<'a> {
     LineBreak,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+enum LiteralTerminator {
+    Quote,
+    Tick,
+}
+
+impl LiteralTerminator {
+    pub fn get_char(&self) -> char {
+        match self {
+            LiteralTerminator::Quote => QUOTE,
+            LiteralTerminator::Tick => TICK,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum SpecialCharacter {
     NewLine(usize),
-    Quote(usize),
-    Tick(usize),
-    FieldStop(usize),
+    LiteralMarker(usize, LiteralTerminator),
+    FieldStop(usize, char),
 }
 
 impl SpecialCharacter {
     pub fn get_position(&self) -> usize {
         match self {
             SpecialCharacter::NewLine(pos) => *pos,
-            SpecialCharacter::Quote(pos) => *pos,
-            SpecialCharacter::Tick(pos) => *pos,
-            SpecialCharacter::FieldStop(pos) => *pos,
+            SpecialCharacter::LiteralMarker(pos, _) => *pos,
+            SpecialCharacter::FieldStop(pos, _) => *pos,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            SpecialCharacter::NewLine(_) => NEW_LINE.len_utf8(),
+            SpecialCharacter::FieldStop(_, pat) => pat.len_utf8(),
+            SpecialCharacter::LiteralMarker(_, marker) => marker.get_char().len_utf8(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn quote(pos: usize) -> SpecialCharacter {
+        SpecialCharacter::LiteralMarker(pos, LiteralTerminator::Quote)
     }
 }
 
@@ -66,12 +92,20 @@ fn find_next_unescaped(string: &str, pat: char) -> Option<usize> {
     }
 }
 
-fn find_quote(string: &str) -> Option<SpecialCharacter> {
-    find_next_unescaped(string, QUOTE).map(SpecialCharacter::Quote)
+fn find_literal(string: &str, terminator: LiteralTerminator) -> Option<SpecialCharacter> {
+    find_next_unescaped(string, terminator.get_char())
+        .map(|p| SpecialCharacter::LiteralMarker(p, terminator))
 }
 
-fn find_tick(string: &str) -> Option<SpecialCharacter> {
-    find_next_unescaped(string, TICK).map(SpecialCharacter::Tick)
+fn find_any_literal(string: &str) -> Option<SpecialCharacter> {
+    [
+        find_literal(string, LiteralTerminator::Quote),
+        find_literal(string, LiteralTerminator::Tick),
+    ]
+    .into_iter()
+    .flatten()
+    .sorted()
+    .next()
 }
 
 fn find_new_line(string: &str) -> Option<SpecialCharacter> {
@@ -79,20 +113,21 @@ fn find_new_line(string: &str) -> Option<SpecialCharacter> {
 }
 
 fn find_field_stop(string: &str, field_sep: char) -> Option<SpecialCharacter> {
-    find_next_unescaped(string, field_sep).map(SpecialCharacter::FieldStop)
+    find_next_unescaped(string, field_sep).map(|p| SpecialCharacter::FieldStop(p, field_sep))
 }
 
 fn find_special_char(string: &str, field_sep: char) -> Option<SpecialCharacter> {
-    let chars = [
-        find_quote(string),
-        find_tick(string),
+    [
+        find_any_literal(string),
         find_new_line(string),
         find_field_stop(string, field_sep),
-    ];
-    chars.into_iter().flatten().sorted().next()
+    ]
+    .into_iter()
+    .flatten()
+    .sorted()
+    .next()
 }
 
-// stronk-type for rows.. is this a good idea?
 struct RowBuffer(Vec<Vec<Value>>);
 impl RowBuffer {
     pub fn new() -> RowBuffer {
@@ -135,12 +170,11 @@ pub(crate) struct Parser<R: Read + Seek> {
 fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
     let mut tokens = Vec::new();
     let mut pos = 0;
-    loop {
-        let remainder = &input[pos..];
+    while let Some(remainder) = &input.get(pos..) {
         if let Some(special_char) = find_special_char(remainder, field_sep) {
             let mut end_pos = special_char.get_position();
             match special_char {
-                SpecialCharacter::FieldStop(_) => {
+                SpecialCharacter::FieldStop(_, _) => {
                     tokens.push(Token::Field(&remainder[..end_pos]));
                 }
                 SpecialCharacter::NewLine(_) => {
@@ -150,37 +184,35 @@ fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
                     }
                     tokens.push(Token::LineBreak);
                 }
-                SpecialCharacter::Quote(_) => {
-                    let (token, literal_end_pos) = parse_literal(field_sep, remainder, find_quote)?;
-                    end_pos += literal_end_pos;
-                    tokens.push(token);
-                }
-                SpecialCharacter::Tick(_) => {
-                    let (token, literal_end_pos) = parse_literal(field_sep, remainder, find_tick)?;
+                SpecialCharacter::LiteralMarker(_, terminator) => {
+                    let (token, literal_end_pos) = parse_literal(field_sep, remainder, terminator)?;
                     end_pos += literal_end_pos;
                     tokens.push(token);
                 }
             };
-            pos += end_pos + 1;
+            pos += end_pos + special_char.len();
         } else {
             break;
         }
     }
+
     if pos < input.len() {
         tokens.push(Token::Field(&input[pos..]));
     }
     Ok(tokens)
 }
 
-fn parse_literal<N: Fn(&str) -> Option<SpecialCharacter>>(
+fn parse_literal(
     field_sep: char,
     remainder: &str,
-    literal_stop_finder: N,
+    literal_type: LiteralTerminator,
 ) -> Result<(Token, usize), Error> {
-    let after_first_quote = &remainder[1..];
-    let quote_end = literal_stop_finder(after_first_quote).ok_or(Error::UnterminatedLiteral)?;
-    let after_quote = quote_end.get_position() + 1;
-    let inner_remainder = &remainder[after_quote..];
+    let terminator_len = literal_type.get_char().len_utf8();
+    let after_first_quote = &remainder[terminator_len..];
+    let quote_end =
+        find_literal(after_first_quote, literal_type).ok_or(Error::UnterminatedLiteral)?;
+    let after_second_quote_in_remainder = quote_end.get_position() + 2 * terminator_len;
+    let inner_remainder = &remainder[after_second_quote_in_remainder..];
     let field_end = find_field_stop(inner_remainder, field_sep)
         .map(|sc| sc.get_position())
         .unwrap_or(inner_remainder.len());
@@ -188,11 +220,11 @@ fn parse_literal<N: Fn(&str) -> Option<SpecialCharacter>>(
         .map(|sc| sc.get_position())
         .unwrap_or(inner_remainder.len());
     if line_end < field_end {
-        let token = Token::Field(&remainder[..after_quote]);
-        Ok((token, after_quote))
+        let token = Token::Field(&remainder[..after_second_quote_in_remainder]);
+        Ok((token, after_second_quote_in_remainder - terminator_len))
     } else {
-        let token = Token::Field(&remainder[..after_quote + field_end]);
-        Ok((token, after_quote + field_end))
+        let token = Token::Field(&remainder[..after_second_quote_in_remainder + field_end]);
+        Ok((token, after_second_quote_in_remainder + field_end))
     }
 }
 
@@ -257,14 +289,14 @@ mod tokenizer_tests {
     fn next_special_char_finds_first_quote() {
         let str = ".....\"..',.";
         let next = find_special_char(str, ',').unwrap();
-        assert_eq!(next, SpecialCharacter::Quote(5));
+        assert_eq!(next, SpecialCharacter::quote(5));
     }
 
     #[test]
     fn next_special_char_finds_first_unescaped_quote() {
         let str = "..\\\".\"..',.";
         let next = find_special_char(str, ',').unwrap();
-        assert_eq!(next, SpecialCharacter::Quote(5));
+        assert_eq!(next, SpecialCharacter::quote(5));
     }
 
     #[test]
@@ -279,10 +311,38 @@ mod tokenizer_tests {
 
     #[test]
     fn tokenization_with_literals() {
-        let str = "bla,\"bla,bla\",2.0";
+        let str = r#"bla,"bla,bla",2.0"#;
         let mut tokens = tokenize(str, ',').unwrap();
         assert_eq!(tokens.len(), 3);
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla,bla\""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+    }
+
+    #[test]
+    fn tokenization_of_unterminated_literal_errors() {
+        let str = r#"bla,"There is no termination"#;
+        let tokens = tokenize(str, ',');
+        assert!(matches!(tokens.unwrap_err(), Error::UnterminatedLiteral));
+    }
+
+    #[test]
+    fn tokenization_of_literals_and_spaces() {
+        let str = r#"bla, "literally""#;
+        let mut tokens = tokenize(str, ',').unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens.pop().unwrap(), Token::Field(" \"literally\""));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+    }
+
+    #[test]
+    fn tokenization_literals_at_line_end() {
+        let str = r#"bla,"bla,bla"
+bla,bla"#;
+        let mut tokens = tokenize(str, ',').unwrap();
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+        assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
+        assert_eq!(tokens.pop().unwrap(), Token::LineBreak);
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"bla,bla\""));
         assert_eq!(tokens.pop().unwrap(), Token::Field("bla"));
     }
@@ -312,6 +372,30 @@ mod tokenizer_tests {
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"'bla\\\"\nbla'\""));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\\\"bla"));
+    }
+
+    #[test]
+    fn tokenization_windows_newlines() {
+        let str = "bla\n\rbla";
+        let mut tokens = Parser::new(
+            Cursor::new(str),
+            Delimiters {
+                field_delimiter: Some(','),
+                decimal_separator: None,
+            },
+        )
+        .unwrap()
+        .parse_to_rows()
+        .unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(
+            *tokens.next().unwrap().first().unwrap(),
+            Value::from_str("bla", &None)
+        );
+        assert_eq!(
+            *tokens.next().unwrap().first().unwrap(),
+            Value::from_str("bla", &None)
+        );
     }
 
     #[test]
