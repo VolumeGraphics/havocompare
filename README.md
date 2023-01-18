@@ -183,7 +183,10 @@ Currently we only support SHA-256 but more checks can be added easily.
 - Fixed a bug regarding wrong handling of multiple empty lines
 - Reworked CSV reporting to have an interleaved and more compact view
 - Made header-extraction fallible but uncritical - can now always be enabled
-- Wrote a completely new csv parser that respects escaping with '\' and string literals (even multi-line ones...) 
+- Wrote a completely new csv parser:
+  - Respects escaping with '\'
+  - Allows string-literals containing unescaped field separators (field1, "field2, but as literal", field3)
+  - Allows multi-line string literals
 
 ### 0.1.4
 - Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
