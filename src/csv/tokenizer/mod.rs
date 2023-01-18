@@ -10,7 +10,7 @@ use tracing::info;
 mod guess_format;
 const BOM: char = '\u{feff}';
 const DEFAULT_FIELD_SEPARATOR: char = ',';
-const ESCAPE_SEQUENCE: &str = "\\";
+const ESCAPE_BYTE: u8 = b'\\';
 const QUOTE: char = '\"';
 const TICK: char = '\'';
 const NEW_LINE: char = '\n';
@@ -82,9 +82,14 @@ impl Ord for SpecialCharacter {
 fn find_next_unescaped(string: &str, pat: char) -> Option<usize> {
     let pos = string.find(pat);
     if let Some(pos) = pos {
-        if pos > 0 && &string[pos - 1..pos] == ESCAPE_SEQUENCE {
-            let remainder = &string[pos + 1..];
-            return find_next_unescaped(remainder, pat).map(|ipos| ipos + pos + 1);
+        if pos > 0 {
+            if let Some(byte_before) = string.as_bytes().get(pos - 1) {
+                if *byte_before == ESCAPE_BYTE {
+                    let remainder = &string[pos + pat.len_utf8()..];
+                    return find_next_unescaped(remainder, pat)
+                        .map(|ipos| ipos + pos + pat.len_utf8());
+                }
+            }
         }
         Some(pos)
     } else {
@@ -372,6 +377,13 @@ bla,bla"#;
         assert_eq!(tokens.pop().unwrap(), Token::Field("2.0"));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\"'bla\\\"\nbla'\""));
         assert_eq!(tokens.pop().unwrap(), Token::Field("\\\"bla"));
+    }
+
+    #[test]
+    fn find_chars_unicode_with_utf8() {
+        let str = r#"mm²,Area"#;
+        let pos = find_next_unescaped(str, ',').unwrap();
+        assert_eq!(pos, 4);
     }
 
     #[test]
