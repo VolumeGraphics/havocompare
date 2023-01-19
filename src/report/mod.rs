@@ -8,7 +8,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use tera::{Context, Tera};
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, info, span};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -123,7 +123,7 @@ pub fn write_html_detail(
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
 
-    info!("detail html {:?} created", &detail_file);
+    debug!("detail html {:?} created", &detail_file);
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
@@ -258,7 +258,7 @@ pub(crate) fn write_csv_detail(
     ctx.insert("row_index_increment", &row_index_increment);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
-    info!("detail html {:?} created", &detail_file);
+    debug!("detail html {:?} created", &detail_file);
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
@@ -318,7 +318,7 @@ pub fn write_image_detail(
     ctx.insert("nominal_image", &nominal_image);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
-    info!("detail html {:?} created", &detail_file);
+    debug!("detail html {:?} created", &detail_file);
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
@@ -395,7 +395,7 @@ pub fn write_pdf_detail(
 
     ctx.insert("errors", diffs);
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
-    info!("detail html {:?} created", &detail_file);
+    debug!("detail html {:?} created", &detail_file);
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
@@ -409,6 +409,8 @@ pub(crate) fn create(
     rule_results: &[RuleResult],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
+    let _reporting_span = span!(tracing::Level::INFO, "Reporting");
+    let _reporting_span = _reporting_span.enter();
     let report_dir = report_path.as_ref();
     if report_dir.is_dir() {
         info!("Delete report folder");
@@ -421,12 +423,12 @@ pub(crate) fn create(
     //move folders
     for rule_result in rule_results.iter() {
         let sub_folder = report_dir.join(&rule_result.rule.name);
-        info!("Create subfolder {:?}", &sub_folder);
+        debug!("Create subfolder {:?}", &sub_folder);
         fat_io_wrap_std(&sub_folder, &fs::create_dir)?;
         for file_result in rule_result.compare_results.iter() {
             if let Some(detail) = &file_result.detail_path {
                 let target = &sub_folder.join(detail);
-                info!("moving subfolder {:?} to {:?}", &detail, &target);
+                debug!("moving subfolder {:?} to {:?}", &detail, &target);
 
                 let files = crate::glob_files(detail, &["*"])?;
                 for file in files.iter() {
@@ -469,6 +471,6 @@ pub(crate) fn write_index(
     let file = fat_io_wrap_std(&index_file, &File::create)?;
     tera.render_to(&index_file.to_string_lossy(), &ctx, file)?;
 
-    info!("Report.html created");
+    debug!("Report.html created");
     Ok(())
 }

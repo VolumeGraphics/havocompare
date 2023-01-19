@@ -157,17 +157,12 @@ fn process_file(
     actual: impl AsRef<Path>,
     rule: &Rule,
 ) -> Result<FileCompareResult, Box<dyn std::error::Error>> {
-    let file_name_nominal = get_file_name(nominal.as_ref()).ok_or(Error::FilePathParsingFails(
-        nominal.as_ref().to_string_lossy().into_owned(),
-    ))?;
-    let file_name_actual = get_file_name(nominal.as_ref()).ok_or(Error::FilePathParsingFails(
-        actual.as_ref().to_string_lossy().into_owned(),
-    ))?;
+    let file_name_nominal = nominal.as_ref().to_string_lossy();
+    let file_name_actual = actual.as_ref().to_string_lossy();
     let _file_span = span!(tracing::Level::INFO, "Processing");
     let _file_span = _file_span.enter();
 
-    info!("Nominal: {}", file_name_nominal);
-    info!("Actual: {}", file_name_actual);
+    info!("File: {file_name_nominal} | {file_name_actual}");
 
     let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> =
         match &rule.file_type {
@@ -197,7 +192,7 @@ fn process_file(
         if compare_result.is_error {
             error!("Files didn't match");
         } else {
-            info!("Files matched");
+            debug!("Files matched");
         }
     } else {
         error!("Problem comparing the files");

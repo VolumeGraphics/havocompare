@@ -3,7 +3,7 @@ use itertools::Itertools;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 fn guess_format_from_line(
     line: &str,
@@ -101,7 +101,7 @@ pub(crate) fn guess_format_from_reader<R: Read + Seek>(
         field_delimiter: format.0,
         decimal_separator: format.1,
     };
-    info!(
+    debug!(
         "Inferring of csv delimiters resulted in decimal separators: '{:?}', field delimiter: '{:?}'",
         delim.decimal_separator, delim.field_delimiter
     );
