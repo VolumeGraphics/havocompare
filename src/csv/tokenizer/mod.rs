@@ -2,7 +2,6 @@ use super::Error;
 use crate::csv::tokenizer::guess_format::guess_format_from_reader;
 use crate::csv::value::Value;
 use crate::csv::Delimiters;
-use itertools::Itertools;
 use std::cmp::Ordering;
 use std::io::{Read, Seek};
 use tracing::info;
@@ -112,17 +111,6 @@ fn find_literal(string: &str, terminator: LiteralTerminator) -> Option<SpecialCh
         .map(|p| SpecialCharacter::LiteralMarker(p, terminator))
 }
 
-fn find_any_literal(string: &str) -> Option<SpecialCharacter> {
-    [
-        find_literal(string, LiteralTerminator::Quote),
-        find_literal(string, LiteralTerminator::Tick),
-    ]
-    .into_iter()
-    .flatten()
-    .sorted()
-    .next()
-}
-
 fn find_new_line(string: &str) -> Option<SpecialCharacter> {
     find_next_unescaped(string, NEW_LINE).map(SpecialCharacter::NewLine)
 }
@@ -132,15 +120,33 @@ fn find_field_stop(string: &str, field_sep: char) -> Option<SpecialCharacter> {
 }
 
 fn find_special_char(string: &str, field_sep: char) -> Option<SpecialCharacter> {
-    [
-        find_any_literal(string),
-        find_new_line(string),
-        find_field_stop(string, field_sep),
-    ]
-    .into_iter()
-    .flatten()
-    .sorted()
-    .next()
+    for (pos, chr) in string.char_indices() {
+        if pos > 0 && string.as_bytes()[pos - 1] == ESCAPE_BYTE {
+            continue;
+        }
+        match chr {
+            QUOTE => {
+                return Some(SpecialCharacter::LiteralMarker(
+                    pos,
+                    LiteralTerminator::Quote,
+                ));
+            }
+            TICK => {
+                return Some(SpecialCharacter::LiteralMarker(
+                    pos,
+                    LiteralTerminator::Tick,
+                ));
+            }
+            NEW_LINE => {
+                return Some(SpecialCharacter::NewLine(pos));
+            }
+            other if other == field_sep => {
+                return Some(SpecialCharacter::FieldStop(pos, field_sep));
+            }
+            _ => continue,
+        }
+    }
+    None
 }
 
 struct RowBuffer(Vec<Vec<Value>>);
@@ -191,7 +197,6 @@ pub(crate) struct Parser<R: Read + Seek> {
 }
 
 fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
-    info!("Tokenizing: {}", input);
     let mut tokens = Vec::new();
     let mut pos = 0;
     while let Some(remainder) = &input.get(pos..) {
@@ -319,7 +324,7 @@ mod tokenizer_tests {
 
     #[test]
     fn next_special_char_finds_first_unescaped_quote() {
-        let str = "..\\\".\"..',.";
+        let str = r#"..\"."..',."#;
         let next = find_special_char(str, ',').unwrap();
         assert_eq!(next, SpecialCharacter::quote(5));
     }
@@ -420,7 +425,7 @@ bla,bla"#;
     }
 
     #[test]
-    fn find_next_unescaped_quote() {
+    fn find_next_unescaped_field_after_utf8_multibyte_char() {
         let str = r#"mm²,Area"#;
         let pos = find_next_unescaped(str, ',').unwrap();
         assert_eq!(pos, 4);
