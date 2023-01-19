@@ -7,6 +7,7 @@ pub use preprocessing::Preprocessor;
 use value::Quantity;
 use value::Value;
 
+use rayon::prelude::*;
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,7 @@ use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 use std::slice::{Iter, IterMut};
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::error;
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -242,14 +243,11 @@ impl Table {
     ) -> Result<Table, Error> {
         let mut cols = Vec::new();
         let input = BufReader::new(input);
-        info!("Setting up csv parser");
         let mut parser = if config.is_empty() {
             tokenizer::Parser::new_guess_format(input)?
         } else {
             tokenizer::Parser::new(input, config.clone()).ok_or(Error::FormatGuessingFailure)?
         };
-
-        info!("Parsing the file");
 
         for (line_num, fields) in parser.parse_to_rows()?.enumerate() {
             if cols.is_empty() {
@@ -419,22 +417,28 @@ fn compare_values(
     }
 }
 
-fn get_diffs_readers<R: Read + Seek>(
+fn get_diffs_readers<R: Read + Seek + Send>(
     nominal: R,
     actual: R,
     config: &CSVCompareConfig,
 ) -> Result<(Table, Table, Vec<DiffType>), Error> {
-    let mut nominal = Table::from_reader(nominal, &config.delimiters)?;
-    let mut actual = Table::from_reader(actual, &config.delimiters)?;
-    info!("Running preprocessing steps");
-    if let Some(preprocessors) = config.preprocessing.as_ref() {
-        for preprocessor in preprocessors.iter() {
-            preprocessor.process(&mut nominal)?;
-            preprocessor.process(&mut actual)?;
+    let tables: Result<Vec<Table>, Error> = [nominal, actual]
+        .into_par_iter()
+        .map(|r| Table::from_reader(r, &config.delimiters))
+        .collect();
+    let mut tables = tables?;
+    if let (Some(mut actual), Some(mut nominal)) = (tables.pop(), tables.pop()) {
+        if let Some(preprocessors) = config.preprocessing.as_ref() {
+            for preprocessor in preprocessors.iter() {
+                preprocessor.process(&mut nominal)?;
+                preprocessor.process(&mut actual)?;
+            }
         }
+        let comparison_result = compare_tables(&nominal, &actual, config)?;
+        Ok((nominal, actual, comparison_result))
+    } else {
+        Err(Error::UnterminatedLiteral)
     }
-    let comparison_result = compare_tables(&nominal, &actual, config)?;
-    Ok((nominal, actual, comparison_result))
 }
 
 pub(crate) fn compare_paths(

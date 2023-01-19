@@ -248,7 +248,7 @@ pub(crate) fn write_csv_detail(
         template::PLAIN_CSV_DETAIL_TEMPLATE,
     )?;
 
-    let row_index_increment: usize = if headers.columns.is_empty() { 0 } else { 1 };
+    let row_index_increment: usize = usize::from(!headers.columns.is_empty());
 
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());

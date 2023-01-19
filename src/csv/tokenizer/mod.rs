@@ -4,7 +4,7 @@ use crate::csv::value::Value;
 use crate::csv::Delimiters;
 use std::cmp::Ordering;
 use std::io::{Read, Seek};
-use tracing::info;
+use tracing::debug;
 
 mod guess_format;
 const BOM: char = '\u{feff}';
@@ -270,7 +270,7 @@ impl<R: Read + Seek> Parser<R> {
     }
 
     pub(crate) fn parse_to_rows(&mut self) -> Result<std::vec::IntoIter<Vec<Value>>, Error> {
-        info!(
+        debug!(
             "Generating tokens with field delimiter: {:?}",
             self.delimiters.field_delimiter
         );

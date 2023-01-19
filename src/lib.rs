@@ -31,7 +31,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, span};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -66,6 +66,10 @@ pub enum Error {
     /// could not extract filename from path
     #[error("File path parsing failed")]
     FilePathParsingFails(String),
+
+    /// Different number of files matched pattern in actual and nominal
+    #[error("Different number of files matched pattern in actual {0} and nominal {1}")]
+    DifferentNumberOfFiles(usize, usize),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -153,11 +157,17 @@ fn process_file(
     actual: impl AsRef<Path>,
     rule: &Rule,
 ) -> Result<FileCompareResult, Box<dyn std::error::Error>> {
-    info!(
-        "Processing files: {} vs {}...",
-        nominal.as_ref().to_string_lossy(),
-        actual.as_ref().to_string_lossy()
-    );
+    let file_name_nominal = get_file_name(nominal.as_ref()).ok_or(Error::FilePathParsingFails(
+        nominal.as_ref().to_string_lossy().into_owned(),
+    ))?;
+    let file_name_actual = get_file_name(nominal.as_ref()).ok_or(Error::FilePathParsingFails(
+        actual.as_ref().to_string_lossy().into_owned(),
+    ))?;
+    let _file_span = span!(tracing::Level::INFO, "Processing");
+    let _file_span = _file_span.enter();
+
+    info!("Nominal: {}", file_name_nominal);
+    info!("Actual: {}", file_name_actual);
 
     let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> =
         match &rule.file_type {
@@ -212,7 +222,9 @@ fn process_rule(
     rule: &Rule,
     compare_results: &mut Vec<Result<FileCompareResult, Box<dyn std::error::Error>>>,
 ) -> Result<bool, Error> {
-    info!("Processing rule: {}", rule.name.as_str());
+    let _file_span = span!(tracing::Level::INFO, "Rule");
+    let _file_span = _file_span.enter();
+    info!("Name: {}", rule.name.as_str());
     if !nominal.as_ref().is_dir() {
         error!(
             "Nominal folder {} is not a folder",
@@ -239,6 +251,12 @@ fn process_rule(
         actual_cleaned_paths.len(),
         nominal_cleaned_paths.len()
     );
+    let actual_files = actual_cleaned_paths.len();
+    let nominal_files = nominal_cleaned_paths.len();
+
+    if actual_files != nominal_files {
+        return Err(Error::DifferentNumberOfFiles(actual_files, nominal_files));
+    }
 
     let mut all_okay = true;
     nominal_cleaned_paths
