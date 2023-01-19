@@ -91,7 +91,8 @@ rules:
       exclude_field_regex: "Excluded"
       # optional: preprocessing of the csv files
       preprocessing:
-        # extracts the headers to the header-fields, makes reportings more legible and allows for further processing "ByName"
+        # extracts the headers to the header-fields, makes reports more legible and allows for further processing "ByName".
+        # While it may fail, there's no penalty for it, as long as you don't rely on it.
         - ExtractHeaders
         # Sort the table by column 0, beware that the column must only contain numbers / quantities
         - SortByColumnNumber: 0

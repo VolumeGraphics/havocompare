@@ -11,6 +11,7 @@ mod guess_format;
 const BOM: char = '\u{feff}';
 const DEFAULT_FIELD_SEPARATOR: char = ',';
 const ESCAPE_BYTE: u8 = b'\\';
+const ESCAPE_QUOTE_BYTE: u8 = b'"';
 const QUOTE: char = '\"';
 const TICK: char = '\'';
 const NEW_LINE: char = '\n';
@@ -88,6 +89,15 @@ fn find_next_unescaped(string: &str, pat: char) -> Option<usize> {
                     let remainder = &string[pos + pat.len_utf8()..];
                     return find_next_unescaped(remainder, pat)
                         .map(|ipos| ipos + pos + pat.len_utf8());
+                }
+            }
+        }
+        if pos < string.len() - 1 && pat == QUOTE {
+            if let Some(byte_after) = string.as_bytes().get(pos + 1) {
+                if *byte_after == ESCAPE_QUOTE_BYTE {
+                    let new_start_offset = pos + pat.len_utf8() + 1;
+                    let remainder = &string[new_start_offset..];
+                    return find_next_unescaped(remainder, pat).map(|ipos| ipos + new_start_offset);
                 }
             }
         }
@@ -181,6 +191,7 @@ pub(crate) struct Parser<R: Read + Seek> {
 }
 
 fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
+    info!("Tokenizing: {}", input);
     let mut tokens = Vec::new();
     let mut pos = 0;
     while let Some(remainder) = &input.get(pos..) {
@@ -263,7 +274,6 @@ impl<R: Read + Seek> Parser<R> {
         self.reader.read_to_string(&mut string_buffer)?;
         // remove BoM & windows line endings to linux line endings
         string_buffer.retain(|c| ![BOM, CARRIAGE_RETURN].contains(&c));
-
         let field_sep = self
             .delimiters
             .field_delimiter
@@ -410,6 +420,13 @@ bla,bla"#;
     }
 
     #[test]
+    fn find_next_unescaped_quote() {
+        let str = r#"mm²,Area"#;
+        let pos = find_next_unescaped(str, ',').unwrap();
+        assert_eq!(pos, 4);
+    }
+
+    #[test]
     fn tokenization_windows_newlines() {
         let str = "bla\n\rbla";
         let mut tokens = Parser::new(
@@ -468,6 +485,35 @@ bla,bla"#;
         let mut parser = Parser::new_guess_format(nominal).unwrap();
         for line in parser.parse_to_rows().unwrap() {
             assert_eq!(line.len(), 5);
+        }
+    }
+
+    #[test]
+    fn special_quote_escape_works() {
+        let str = r#"""..""#;
+        let quote = find_next_unescaped(str, '\"').unwrap();
+        assert_eq!(quote, 4);
+    }
+
+    #[test]
+    fn special_quote_escape_works_complicated() {
+        let str = r#"""Scene""=>""Mesh 1""""#;
+        let (pos, _, _) = parse_literal(',', str, LiteralTerminator::Quote).unwrap();
+        assert_eq!(pos, 22);
+    }
+
+    #[test]
+    fn tokenize_complicated_literal_smoke() {
+        let str = r#"Deviation interval A [mm],-0.6
+Deviation interval B [mm],0.6
+Actual object,"""Scene""=>""Volume 1""=>""Merged region"""
+Nominal object,"""Scene""=>""Mesh 1""""#;
+        let lines = Parser::new_guess_format(Cursor::new(str))
+            .unwrap()
+            .parse_to_rows()
+            .unwrap();
+        for line in lines {
+            assert_eq!(line.len(), 2);
         }
     }
 }
