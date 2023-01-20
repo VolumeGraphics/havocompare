@@ -12,7 +12,6 @@ const DEFAULT_FIELD_SEPARATOR: char = ',';
 const ESCAPE_BYTE: u8 = b'\\';
 const ESCAPE_QUOTE_BYTE: u8 = b'"';
 const QUOTE: char = '\"';
-const TICK: char = '\'';
 const NEW_LINE: char = '\n';
 const CARRIAGE_RETURN: char = '\r';
 
@@ -25,14 +24,12 @@ pub enum Token<'a> {
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum LiteralTerminator {
     Quote,
-    Tick,
 }
 
 impl LiteralTerminator {
     pub fn get_char(&self) -> char {
         match self {
             LiteralTerminator::Quote => QUOTE,
-            LiteralTerminator::Tick => TICK,
         }
     }
 }
@@ -129,12 +126,6 @@ fn find_special_char(string: &str, field_sep: char) -> Option<SpecialCharacter> 
                 return Some(SpecialCharacter::LiteralMarker(
                     pos,
                     LiteralTerminator::Quote,
-                ));
-            }
-            TICK => {
-                return Some(SpecialCharacter::LiteralMarker(
-                    pos,
-                    LiteralTerminator::Tick,
                 ));
             }
             NEW_LINE => {
@@ -403,7 +394,7 @@ bla,bla"#;
     fn tokenize_to_values_cuts_last_nl() {
         let str = "bla\n2.0\n\n";
         let mut parser = Parser::new_guess_format(Cursor::new(str)).unwrap();
-        let lines: Vec<_> = parser.parse_to_rows().unwrap().collect();
+        let lines = parser.parse_to_rows().unwrap();
         assert_eq!(lines.len(), 2);
     }
 
