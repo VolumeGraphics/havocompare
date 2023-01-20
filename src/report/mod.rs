@@ -3,12 +3,14 @@ mod template;
 use crate::csv::{DiffType, Position, Table};
 use serde::Serialize;
 use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
+use std::iter::zip;
 use std::path::{Path, PathBuf};
 use tera::{Context, Tera};
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -51,17 +53,6 @@ pub struct CSVReportRow {
     pub has_error: bool,
 }
 
-fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
-    path.file_name()
-        .map(|f| f.to_string_lossy())
-        .ok_or_else(|| {
-            Error::FileNameParsing(format!(
-                "Could not extract filename from {}",
-                path.to_string_lossy()
-            ))
-        })
-}
-
 pub fn create_sub_folder(
     rule_name: &str,
     nominal: impl AsRef<Path>,
@@ -94,9 +85,12 @@ pub fn write_html_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
+        .to_string_lossy()
+        .to_string();
     let mut result = FileCompareResult {
-        nominal: get_file_name(nominal.as_ref())?.to_string(),
-        actual: get_file_name(actual.as_ref())?.to_string(),
+        nominal: compared_file_name.clone(),
+        actual: compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -141,9 +135,12 @@ pub(crate) fn write_csv_detail(
     diffs: &[DiffType],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
+        .to_string_lossy()
+        .to_string();
     let mut result = FileCompareResult {
-        nominal: get_file_name(nominal.as_ref())?.to_string(),
-        actual: get_file_name(actual.as_ref())?.to_string(),
+        nominal: compared_file_name.clone(),
+        actual: compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -274,9 +271,12 @@ pub fn write_image_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
+        .to_string_lossy()
+        .to_string();
     let mut result = FileCompareResult {
-        nominal: get_file_name(nominal.as_ref())?.to_string(),
-        actual: get_file_name(actual.as_ref())?.to_string(),
+        nominal: compared_file_name.clone(),
+        actual: compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -298,6 +298,17 @@ pub fn write_image_detail(
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
+
+    fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
+        path.file_name()
+            .map(|f| f.to_string_lossy())
+            .ok_or_else(|| {
+                Error::FileNameParsing(format!(
+                    "Could not extract filename from {}",
+                    path.to_string_lossy()
+                ))
+            })
+    }
 
     let actual_image = format!("actual_image_{}", get_file_name(actual.as_ref())?);
     let nominal_image = format!("nominal_image_.{}", get_file_name(nominal.as_ref())?);
@@ -336,9 +347,12 @@ pub fn write_pdf_detail(
     diffs: &[(usize, String)],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
+    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
+        .to_string_lossy()
+        .to_string();
     let mut result = FileCompareResult {
-        nominal: get_file_name(nominal.as_ref())?.to_string(),
-        actual: get_file_name(actual.as_ref())?.to_string(),
+        nominal: compared_file_name.clone(),
+        actual: compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -471,4 +485,72 @@ pub(crate) fn write_index(
 
     info!("Report.html created");
     Ok(())
+}
+
+///Find the relative path between two files
+/// compare both files n reversed order (from bottom to top), and returns only the part which are the same on both files
+fn get_relative_path(actual_path: impl AsRef<Path>, nominal_path: impl AsRef<Path>) -> PathBuf {
+    let actual_iter = actual_path.as_ref().iter().rev();
+    let nominal_iter = nominal_path.as_ref().iter().rev();
+    let zipped_path = zip(nominal_iter, actual_iter);
+
+    let mut is_the_same = true;
+    let mut paths: Vec<&OsStr> = Vec::new();
+    for (n, a) in zipped_path {
+        if n != a {
+            is_the_same = false;
+        }
+
+        if is_the_same {
+            paths.push(n);
+        }
+    }
+
+    paths.reverse();
+
+    PathBuf::from_iter(paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_relative_path() {
+        let result = get_relative_path(
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
+            "tests/integ/data/display_of_status_message_in_cm_tables/actual/Volume1.csv",
+        );
+        assert_eq!(PathBuf::from("Volume1.csv"), result);
+
+        let result = get_relative_path(
+            "tests/act/something/csv/test.csv",
+            "tests/exp/something/csv/test.csv",
+        );
+        assert_eq!(PathBuf::from("something/csv/test.csv"), result);
+
+        let result = get_relative_path(
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
+            "C:/Users/someuser/Documents/git/havocompare/tests/actual/Volume1.csv",
+        );
+        assert_eq!(PathBuf::from("Volume1.csv"), result);
+
+        let result = get_relative_path(
+            "tests/actual/csv/Volume1.csv",
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/csv/Volume1.csv",
+        );
+        assert_eq!(PathBuf::from("csv/Volume1.csv"), result);
+
+        let result = get_relative_path(
+            "csv/Volume1.csv",
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/csv/Volume1.csv",
+        );
+        assert_eq!(PathBuf::from("csv/Volume1.csv"), result);
+
+        let result = get_relative_path(
+            "csv/Volume1.csv",
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
+        );
+        assert_eq!(PathBuf::from("Volume1.csv"), result);
+    }
 }

@@ -182,6 +182,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 - Expose config struct to library API
 - Fixed a bug regarding wrong handling of multiple empty lines
 - Reworked CSV reporting to have an interleaved and more compact view 
+- Display the relative path of compared files instead of file name in the report index.html
 
 ### 0.1.4
 - Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
