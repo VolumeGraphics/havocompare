@@ -96,12 +96,12 @@ rules:
         - ExtractHeaders
         # Sort the table by column 0, beware that the column must only contain numbers / quantities
         - SortByColumnNumber: 0
-        # Delete a column by name, needs `ExtractHeaders` first - delete sets all values to 'DELETED's
+        # Delete a column by name, needs `ExtractHeaders` first - delete sets all values to 'DELETED'
         - DeleteColumnByName: "Column to delete"
         - DeleteColumnByNumber: 1
         # Sorts are stable, so a second sort will keep the first sort as sub-order.
         - SortByColumnName: "Sort by column name blabla"
-        # Deletes the first row by setting all values to 'DELETED's - meaning that numbering stays constant 
+        # Deletes the first row by setting all values to 'DELETED' - meaning that numbering stays constant 
         - DeleteRowByNumber: 0
         # Deletes rows having any element matching the given regex (may delete different lines in nom / act!
         - DeleteRowByRegex: "Vertex_Count"
@@ -178,7 +178,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ## Changelog
 
-### 0.1.5
+### 0.2.0
 - Deletion of columns will no longer really delete them but replace every value with "DELETED"
 - Expose config struct to library API
 - Fixed a bug regarding wrong handling of multiple empty lines
@@ -188,8 +188,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 - Wrote a completely new csv parser:
   - Respects escaping with '\'
   - Allows string-literals containing unescaped field separators (field1, "field2, but as literal", field3)
-  - Allows multi-line string literals
-  - Multi quote escapes work
+  - Allows multi-line string literals with quotes
 - CSVs with non-rectangular format will now fail
 
 ### 0.1.4
