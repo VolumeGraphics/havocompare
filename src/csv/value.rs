@@ -101,3 +101,14 @@ impl Value {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn trimming() {
+        let val_spaced = Value::from_str(" value ", &None);
+        let reference = Value::from_str("value", &None);
+        assert_eq!(val_spaced, reference);
+    }
+}
