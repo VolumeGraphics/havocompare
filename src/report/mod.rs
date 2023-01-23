@@ -27,8 +27,7 @@ pub enum Error {
 
 #[derive(Serialize, Debug)]
 pub struct FileCompareResult {
-    pub nominal: String,
-    pub actual: String,
+    pub compared_file_name: String,
     pub is_error: bool,
     pub detail_path: Option<PathBuf>,
 }
@@ -89,8 +88,7 @@ pub fn write_html_detail(
         .to_string_lossy()
         .to_string();
     let mut result = FileCompareResult {
-        nominal: compared_file_name.clone(),
-        actual: compared_file_name,
+        compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -139,8 +137,7 @@ pub(crate) fn write_csv_detail(
         .to_string_lossy()
         .to_string();
     let mut result = FileCompareResult {
-        nominal: compared_file_name.clone(),
-        actual: compared_file_name,
+        compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -275,8 +272,7 @@ pub fn write_image_detail(
         .to_string_lossy()
         .to_string();
     let mut result = FileCompareResult {
-        nominal: compared_file_name.clone(),
-        actual: compared_file_name,
+        compared_file_name,
         is_error: false,
         detail_path: None,
     };
@@ -350,9 +346,9 @@ pub fn write_pdf_detail(
     let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
         .to_string_lossy()
         .to_string();
+
     let mut result = FileCompareResult {
-        nominal: compared_file_name.clone(),
-        actual: compared_file_name,
+        compared_file_name,
         is_error: false,
         detail_path: None,
     };
