@@ -7,13 +7,21 @@ use std::cmp::Ordering::Equal;
 use tracing::{debug, warn};
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug)]
+/// Preprocessor options
 pub enum Preprocessor {
+    /// Try to extract the headers from the first row - fallible if first row contains a number
     ExtractHeaders,
+    /// Replace all fields in column by number by a deleted marker
     DeleteColumnByNumber(usize),
+    /// Replace all fields in column by name by a deleted marker
     DeleteColumnByName(String),
+    /// Sort rows by column with given name. Fails if no headers were extracted or column name is not found, or if any row has no numbers there
     SortByColumnName(String),
+    /// Sort rows by column with given number. Fails if any row has no numbers there or if out of bounds.
     SortByColumnNumber(usize),
+    /// Replace all fields in row with given number by a deleted marker
     DeleteRowByNumber(usize),
+    /// Replace all fields in row  where at least a single field matches regex by a deleted marker
     DeleteRowByRegex(String),
 }
 
@@ -129,14 +137,21 @@ fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
 
 fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
     debug!("Extracting headers...");
+    let can_extract = table
+        .columns
+        .iter()
+        .all(|c| matches!(c.rows.first(), Some(Value::String(_))));
+    if !can_extract {
+        warn!("Cannot extract header for this csv!");
+        return Ok(());
+    }
+
     for col in table.columns.iter_mut() {
         let title = col.rows.drain(0..1).next().ok_or_else(|| {
             csv::Error::InvalidAccess("Tried to extract header of empty column!".to_string())
         })?;
         if let Value::String(title) = title {
             col.header = Some(title);
-        } else {
-            warn!("First entry in column was not a string!");
         }
     }
     Ok(())

@@ -11,7 +11,9 @@
 
 /// comparison module for csv comparison
 pub mod csv;
+
 pub use csv::CSVCompareConfig;
+use std::borrow::Cow;
 mod hash;
 pub use hash::HashConfig;
 mod html;
@@ -26,9 +28,10 @@ use schemars::schema_for;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, span};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -40,10 +43,14 @@ pub enum Error {
     /// Regex pattern requested could not be compiled
     #[error("Failed to compile regex! {0}")]
     RegexCompilationError(#[from] regex::Error),
-    /// An error occured in the csv rule checker
+    /// An error occurred in the csv rule checker
     #[error("CSV module error")]
     CSVModuleError(#[from] csv::Error),
-    /// An error occured in the reporting module
+    /// An error occurred in the image rule checker
+    #[error("CSV module error")]
+    ImageModuleError(#[from] image::Error),
+
+    /// An error occurred in the reporting module
     #[error("Error occurred during report creation {0}")]
     ReportingError(#[from] report::Error),
     /// An error occurred during reading yaml
@@ -55,6 +62,14 @@ pub enum Error {
     /// A problem happened while accessing a file
     #[error("File access failed {0}")]
     FileAccessError(#[from] FatIOError),
+
+    /// could not extract filename from path
+    #[error("File path parsing failed")]
+    FilePathParsingFails(String),
+
+    /// Different number of files matched pattern in actual and nominal
+    #[error("Different number of files matched pattern in actual {0} and nominal {1}")]
+    DifferentNumberOfFiles(usize, usize),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -73,11 +88,29 @@ pub enum ComparisonMode {
     PDFText(HTMLCompareConfig),
 }
 
+fn get_file_name(path: &Path) -> Option<Cow<str>> {
+    path.file_name().map(|f| f.to_string_lossy())
+}
+
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// Represents a whole configuration file consisting of several comparison rules
 pub struct ConfigurationFile {
     /// A list of all rules to be checked on run
     pub rules: Vec<Rule>,
+}
+
+impl ConfigurationFile {
+    /// creates a [`ConfigurationFile`] file struct from anything implementing `Read`
+    pub fn from_reader(reader: impl Read) -> Result<ConfigurationFile, Error> {
+        let config: ConfigurationFile = serde_yaml::from_reader(reader)?;
+        Ok(config)
+    }
+
+    /// creates a [`ConfigurationFile`] from anything path-convertible
+    pub fn from_file(file: impl AsRef<Path>) -> Result<ConfigurationFile, Error> {
+        let config_reader = fat_io_wrap_std(file, &File::open)?;
+        Self::from_reader(BufReader::new(config_reader))
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -124,11 +157,12 @@ fn process_file(
     actual: impl AsRef<Path>,
     rule: &Rule,
 ) -> Result<FileCompareResult, Box<dyn std::error::Error>> {
-    info!(
-        "Processing files: {} vs {}...",
-        nominal.as_ref().to_string_lossy(),
-        actual.as_ref().to_string_lossy()
-    );
+    let file_name_nominal = nominal.as_ref().to_string_lossy();
+    let file_name_actual = actual.as_ref().to_string_lossy();
+    let _file_span = span!(tracing::Level::INFO, "Processing");
+    let _file_span = _file_span.enter();
+
+    info!("File: {file_name_nominal} | {file_name_actual}");
 
     let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> =
         match &rule.file_type {
@@ -158,7 +192,7 @@ fn process_file(
         if compare_result.is_error {
             error!("Files didn't match");
         } else {
-            info!("Files matched");
+            debug!("Files matched");
         }
     } else {
         error!("Problem comparing the files");
@@ -183,7 +217,9 @@ fn process_rule(
     rule: &Rule,
     compare_results: &mut Vec<Result<FileCompareResult, Box<dyn std::error::Error>>>,
 ) -> Result<bool, Error> {
-    info!("Processing rule: {}", rule.name.as_str());
+    let _file_span = span!(tracing::Level::INFO, "Rule");
+    let _file_span = _file_span.enter();
+    info!("Name: {}", rule.name.as_str());
     if !nominal.as_ref().is_dir() {
         error!(
             "Nominal folder {} is not a folder",
@@ -210,6 +246,12 @@ fn process_rule(
         actual_cleaned_paths.len(),
         nominal_cleaned_paths.len()
     );
+    let actual_files = actual_cleaned_paths.len();
+    let nominal_files = nominal_cleaned_paths.len();
+
+    if actual_files != nominal_files {
+        return Err(Error::DifferentNumberOfFiles(actual_files, nominal_files));
+    }
 
     let mut all_okay = true;
     nominal_cleaned_paths
@@ -278,8 +320,7 @@ pub fn compare_folders(
     config_file: impl AsRef<Path>,
     report_path: impl AsRef<Path>,
 ) -> Result<bool, Error> {
-    let config_reader = fat_io_wrap_std(config_file, &File::open)?;
-    let config: ConfigurationFile = serde_yaml::from_reader(config_reader)?;
+    let config = ConfigurationFile::from_file(config_file)?;
     compare_folders_cfg(nominal, actual, config, report_path)
 }
 

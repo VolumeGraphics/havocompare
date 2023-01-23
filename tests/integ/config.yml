@@ -8,8 +8,6 @@ rules:
       comparison_modes:
       - Absolute: 1.0
       - Relative: 0.1
-      decimal_separator: '.'
-      field_delimiter: ','
       exclude_field_regex: "Excluded"
 
   - name: "HTML-Compare strict"

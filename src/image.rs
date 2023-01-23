@@ -1,8 +1,7 @@
-use crate::report;
+use crate::{get_file_name, report};
 use image_compare::ToColorMap;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{error, info};
@@ -12,6 +11,19 @@ use tracing::{error, info};
 pub struct ImageCompareConfig {
     /// Threshold for image comparison < 0.5 is very dissimilar, 1.0 is identical
     pub threshold: f64,
+}
+
+impl ImageCompareConfig {
+    /// create an [`ImageCompareConfig`] given the threshold
+    pub fn from_threshold(threshold: f64) -> Self {
+        ImageCompareConfig { threshold }
+    }
+}
+
+impl Default for ImageCompareConfig {
+    fn default() -> Self {
+        ImageCompareConfig::from_threshold(1.0)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -24,17 +36,6 @@ pub enum Error {
     ImageComparison(#[from] image_compare::CompareError),
     #[error("Problem processing file name {0}")]
     FileNameParsing(String),
-}
-
-fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
-    path.file_name()
-        .map(|f| f.to_string_lossy())
-        .ok_or_else(|| {
-            Error::FileNameParsing(format!(
-                "Could not extract filename from {}",
-                path.to_string_lossy()
-            ))
-        })
 }
 
 pub fn compare_paths<P: AsRef<Path>>(
@@ -50,7 +51,11 @@ pub fn compare_paths<P: AsRef<Path>>(
     let result = image_compare::rgb_hybrid_compare(&nominal, &actual)?;
     if result.score < config.threshold {
         let color_map = result.image.to_color_map();
-        let nominal_file_name = get_file_name(nominal_path.as_ref())?;
+        let nominal_file_name =
+            get_file_name(nominal_path.as_ref()).ok_or(Error::FileNameParsing(format!(
+                "Could not extract filename from path {:?}",
+                nominal_path.as_ref()
+            )))?;
         let out_path = (nominal_file_name + "diff_image.png").to_string();
         info!("Writing diff image to: {}", out_path.as_str());
         color_map.save(PathBuf::from(&out_path))?;

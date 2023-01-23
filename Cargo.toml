@@ -1,14 +1,16 @@
 [package]
 name = "havocompare"
-description = "A flexible folder comparison tool / crate with html reporting."
+description = "A flexible rule-based file and folder comparison tool and crate including nice html reporting. Compares CSVs, text files, pdf-texts and images."
 repository = "https://github.com/VolumeGraphics/havocompare"
 homepage = "https://github.com/VolumeGraphics/havocompare"
 documentation = "https://docs.rs/havocompare"
-version = "0.1.5-RC1"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 authors = ["Volume Graphics GmbH"]
 exclude = ["tests/integ", "tests/html", "target", "tests/csv", ".github", "test_report"]
+keywords = ["diff" ,"compare", "csv", "image", "difference", "csv-diff", "image-diff", "pdf", "pdf-diff", "plain-text", "plain-text-diff"]
+categories = ["filesystem"]
 
 [dependencies]
 clap = {version= "4.0", features=["derive"]}
@@ -19,7 +21,7 @@ schemars_derive = "0.8"
 thiserror = "1.0"
 regex = "1.6"
 image = "0.24.4"
-image-compare = "0.2.3"
+image-compare = "0.2.4"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 serde_json = "1.0"
@@ -35,6 +37,7 @@ data-encoding = "2.3.2"
 permutation = "0.4.1"
 pdf-extract = "0.6.4"
 vg_errortools = "0.1.0"
+rayon = "1.6"
 
 [target.'cfg(windows)'.dependencies]
 ansi_term = "0.12"

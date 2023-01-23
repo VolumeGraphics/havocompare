@@ -1,24 +1,23 @@
 use crate::report;
 mod preprocessing;
+mod tokenizer;
 mod value;
 
-use preprocessing::Preprocessor;
+pub use preprocessing::Preprocessor;
 use value::Quantity;
 use value::Value;
 
-use itertools::Itertools;
+use rayon::prelude::*;
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek};
+use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 use std::slice::{Iter, IterMut};
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
+use tracing::error;
 use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
@@ -39,9 +38,21 @@ pub enum Error {
     #[error("File access failed {0}")]
     /// File access failed
     FileAccessFailed(#[from] FatIOError),
-    #[error("IoError occured {0}")]
+    #[error("IoError occurred {0}")]
     /// Problem involving files or readers
     IoProblem(#[from] std::io::Error),
+
+    #[error("Format guessing failed")]
+    /// Failure to guess field delimiters - decimal separator guessing is optional
+    FormatGuessingFailure,
+
+    #[error("A string literal was started but did never end")]
+    /// A string literal was started but did never end
+    UnterminatedLiteral,
+
+    #[error("CSV format invalid: first row has a different column number then row {0}")]
+    /// The embedded row number had a different column count than the first
+    UnstableColumnCount(usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -170,7 +181,7 @@ impl Mode {
     }
 }
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Default)]
 /// Settings for the CSV comparison module
 pub struct CSVCompareConfig {
     #[serde(flatten)]
@@ -184,22 +195,13 @@ pub struct CSVCompareConfig {
     pub preprocessing: Option<Vec<Preprocessor>>,
 }
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Default)]
 /// Delimiter configuration for file parsing
 pub struct Delimiters {
     /// The delimiters of the csv fields (typically comma, semicolon or pipe)
     pub field_delimiter: Option<char>,
     /// The decimal separator for floating point numbers (typically dot or comma)
     pub decimal_separator: Option<char>,
-}
-
-impl Default for Delimiters {
-    fn default() -> Self {
-        Delimiters {
-            field_delimiter: Some(','),
-            decimal_separator: Some('.'),
-        }
-    }
 }
 
 impl Delimiters {
@@ -236,40 +238,31 @@ pub(crate) struct Table {
 
 impl Table {
     pub(crate) fn from_reader<R: Read + Seek>(
-        mut input: R,
+        input: R,
         config: &Delimiters,
     ) -> Result<Table, Error> {
-        let delimiters = match config.is_empty() {
-            false => Cow::Borrowed(config),
-            true => Cow::Owned(guess_format_from_reader(&mut input)?),
-        };
-        debug!("Final delimiters: {:?}", delimiters);
         let mut cols = Vec::new();
         let input = BufReader::new(input);
-        let result: Result<Vec<()>, Error> = input
-            .lines()
-            .filter_map(|l| l.ok())
-            .map(|r| r.trim_start_matches('\u{feff}').to_owned())
-            .map(|r| split_row(r.as_str(), &delimiters))
-            .filter(|r| !r.is_empty())
-            .map(|fields| {
-                if cols.is_empty() {
-                    cols.resize_with(fields.len(), Column::default);
-                }
-                if fields.len() != cols.len() {
-                    let message = format!("Skipping row due to inconsistent number of columns! First row had {}, this row has {} (row: {:?})",cols.len(), fields.len(), fields);
-                    warn!("{}", message.as_str());
-                } else {
-                    fields
-                        .into_iter()
-                        .zip(cols.iter_mut())
-                        .for_each(|(f, col)| col.rows.push(f));
-                }
-                Ok(())
-            }).collect();
+        let mut parser = if config.is_empty() {
+            tokenizer::Parser::new_guess_format(input)?
+        } else {
+            tokenizer::Parser::new(input, config.clone()).ok_or(Error::FormatGuessingFailure)?
+        };
 
-        if result.is_err() {
-            warn!("Errors occurred during reading of the csv to a table!");
+        for (line_num, fields) in parser.parse_to_rows()?.enumerate() {
+            if cols.is_empty() {
+                cols.resize_with(fields.len(), Column::default);
+            }
+            if fields.len() != cols.len() {
+                let message = format!("Error: Columns inconsistent! First row had {}, this row has {} (row:{line_num})", cols.len(), fields.len());
+                error!("{}", message.as_str());
+                return Err(Error::UnstableColumnCount(line_num));
+            } else {
+                fields
+                    .into_iter()
+                    .zip(cols.iter_mut())
+                    .for_each(|(f, col)| col.rows.push(f));
+            }
         }
 
         Ok(Table { columns: cols })
@@ -354,20 +347,6 @@ pub(crate) fn compare_tables(
     Ok(diffs)
 }
 
-fn split_row(row: &str, config: &Delimiters) -> Vec<Value> {
-    if row.is_empty() {
-        return Vec::new();
-    }
-    if let Some(row_delimiter) = config.field_delimiter.as_ref() {
-        row.split(*row_delimiter)
-            .enumerate()
-            .map(|(_, field)| Value::from_str(field, &config.decimal_separator))
-            .collect()
-    } else {
-        vec![Value::from_str(row, &config.decimal_separator)]
-    }
-}
-
 fn both_quantity<'a>(
     actual: &'a Value,
     nominal: &'a Value,
@@ -438,22 +417,28 @@ fn compare_values(
     }
 }
 
-fn get_diffs_readers<R: Read + Seek>(
+fn get_diffs_readers<R: Read + Seek + Send>(
     nominal: R,
     actual: R,
     config: &CSVCompareConfig,
 ) -> Result<(Table, Table, Vec<DiffType>), Error> {
-    let mut nominal = Table::from_reader(nominal, &config.delimiters)?;
-    let mut actual = Table::from_reader(actual, &config.delimiters)?;
-    info!("Running preprocessing steps");
-    if let Some(preprocessors) = config.preprocessing.as_ref() {
-        for preprocessor in preprocessors.iter() {
-            preprocessor.process(&mut nominal)?;
-            preprocessor.process(&mut actual)?;
+    let tables: Result<Vec<Table>, Error> = [nominal, actual]
+        .into_par_iter()
+        .map(|r| Table::from_reader(r, &config.delimiters))
+        .collect();
+    let mut tables = tables?;
+    if let (Some(mut actual), Some(mut nominal)) = (tables.pop(), tables.pop()) {
+        if let Some(preprocessors) = config.preprocessing.as_ref() {
+            for preprocessor in preprocessors.iter() {
+                preprocessor.process(&mut nominal)?;
+                preprocessor.process(&mut actual)?;
+            }
         }
+        let comparison_result = compare_tables(&nominal, &actual, config)?;
+        Ok((nominal, actual, comparison_result))
+    } else {
+        Err(Error::UnterminatedLiteral)
     }
-    let comparison_result = compare_tables(&nominal, &actual, config)?;
-    Ok((nominal, actual, comparison_result))
 }
 
 pub(crate) fn compare_paths(
@@ -479,102 +464,6 @@ pub(crate) fn compare_paths(
         results.as_slice(),
         rule_name,
     )?)
-}
-
-fn guess_format_from_line(
-    line: &str,
-    field_separator_hint: Option<char>,
-) -> Result<(Option<char>, Option<char>), Error> {
-    let mut field_separator = field_separator_hint;
-
-    if field_separator.is_none() {
-        if line.find(';').is_some() {
-            field_separator = Some(';');
-        } else {
-            let field_sep_regex = Regex::new(r"\w([,|])[\W\w]")?;
-            let capture = field_sep_regex.captures_iter(line).next();
-            if let Some(cap) = capture {
-                field_separator = Some(cap[1].chars().next().ok_or_else(|| {
-                    Error::InvalidAccess(format!(
-                        "Could not capture field separator for guessing from '{}'",
-                        line
-                    ))
-                })?);
-            }
-        }
-    }
-
-    let decimal_separator_candidates = [',', '.'];
-    let context_acceptable_candidates = if let Some(field_separator) = field_separator {
-        decimal_separator_candidates
-            .into_iter()
-            .filter(|c| *c != field_separator)
-            .join("")
-    } else {
-        decimal_separator_candidates.into_iter().join("")
-    };
-
-    let decimal_separator_regex_string = format!(r"\d([{}])\d", context_acceptable_candidates);
-    debug!(
-        "Regex for decimal sep: '{}'",
-        decimal_separator_regex_string.as_str()
-    );
-    let decimal_separator_regex = Regex::new(decimal_separator_regex_string.as_str())?;
-    let mut separators: HashMap<char, usize> = HashMap::new();
-
-    for capture in decimal_separator_regex.captures_iter(line) {
-        let sep = capture[1].chars().next().ok_or_else(|| {
-            Error::InvalidAccess(format!(
-                "Could not capture decimal separator for guessing from '{}'",
-                line
-            ))
-        })?;
-        if let Some(entry) = separators.get_mut(&sep) {
-            *entry += 1;
-        } else {
-            separators.insert(sep, 1);
-        }
-    }
-
-    debug!(
-        "Found separator candidates with occurrence count: {:?}",
-        separators
-    );
-
-    let decimal_separator = separators
-        .iter()
-        .sorted_by(|a, b| b.1.cmp(a.1))
-        .map(|s| s.0.to_owned())
-        .next();
-
-    Ok((field_separator, decimal_separator))
-}
-
-fn guess_format_from_reader<R: Read + Seek>(mut input: &mut R) -> Result<Delimiters, Error> {
-    let mut format = (None, None);
-
-    let bufreader = BufReader::new(&mut input);
-    debug!("Guessing format from reader...");
-    for line in bufreader.lines().filter_map(|l| l.ok()) {
-        debug!("Guessing format from line: '{}'", line.as_str());
-        format = guess_format_from_line(line.as_str(), format.0)?;
-        debug!("Current format: {:?}", format);
-        if format.0.is_some() && format.1.is_some() {
-            break;
-        }
-    }
-
-    input.rewind()?;
-
-    let delim = Delimiters {
-        field_delimiter: format.0,
-        decimal_separator: format.1,
-    };
-    info!(
-        "Inferring of csv delimiters resulted in decimal separators: '{:?}', field delimiter: '{:?}'",
-        delim.decimal_separator, delim.field_delimiter
-    );
-    Ok(delim)
 }
 
 #[cfg(test)]
@@ -888,138 +777,6 @@ mod tests {
     }
 
     #[test]
-    fn format_detection_basics() {
-        let format = guess_format_from_line(
-            "-0.969654597744788,-0.215275534510198,0.115869999295192,7.04555232210696",
-            None,
-        )
-        .unwrap();
-        assert_eq!(format, (Some(','), Some('.')));
-
-        let format = guess_format_from_line(
-            "-0.969654597744788;-0.215275534510198;0.115869999295192;7.04555232210696",
-            None,
-        )
-        .unwrap();
-        assert_eq!(format, (Some(';'), Some('.')));
-
-        let format = guess_format_from_line(
-            "-0.969654597744788,-0.215275534510198,0.115869999295192,7.04555232210696",
-            None,
-        )
-        .unwrap();
-        assert_eq!(format, (Some(','), Some('.')));
-    }
-
-    #[test]
-    fn format_detection_from_file() {
-        let format =
-            guess_format_from_reader(&mut File::open("tests/csv/data/Annotations.csv").unwrap())
-                .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: Some(','),
-                decimal_separator: Some('.')
-            }
-        );
-    }
-
-    #[test]
-    fn format_detection_from_file_metrology_special() {
-        let format = guess_format_from_reader(
-            &mut File::open("tests/csv/data/Multi_Apply_Rotation.csv").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: Some(','),
-                decimal_separator: Some('.')
-            }
-        );
-    }
-
-    #[test]
-    fn format_detection_from_file_metrology_other_special() {
-        let format = guess_format_from_reader(
-            &mut File::open("tests/csv/data/CM_quality_threshold.csv").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: Some(','),
-                decimal_separator: None
-            }
-        );
-    }
-
-    #[test]
-    fn format_detection_from_file_analysis_pia_table() {
-        let format = guess_format_from_reader(
-            &mut File::open("tests/csv/data/easy_pore_export_annoration_table_result.csv").unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: Some(';'),
-                decimal_separator: Some(',')
-            }
-        );
-    }
-
-    #[test]
-    fn format_detection_from_file_no_field_sep() {
-        let format =
-            guess_format_from_reader(&mut File::open("tests/csv/data/no_field_sep.csv").unwrap())
-                .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: None,
-                decimal_separator: Some('.')
-            }
-        );
-    }
-    #[test]
-    fn format_detection_from_file_semicolon_formatting() {
-        let format = guess_format_from_reader(
-            &mut File::open(
-                "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: Some(';'),
-                decimal_separator: Some(',')
-            }
-        );
-    }
-
-    #[test]
-    fn format_detection_from_file_dot_comma_formatting() {
-        let format = guess_format_from_reader(
-            &mut File::open(
-                "tests/integ/data/display_of_status_message_in_cm_tables/actual/Volume1.csv",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            format,
-            Delimiters {
-                field_delimiter: Some(','),
-                decimal_separator: Some('.')
-            }
-        );
-    }
-
-    #[test]
     fn nan_is_nan() {
         let nan = f32::NAN;
         let nominal = Quantity {
@@ -1034,19 +791,6 @@ mod tests {
         assert!(Mode::Relative(1.0).in_tolerance(&nominal, &actual));
         assert!(Mode::Absolute(1.0).in_tolerance(&nominal, &actual));
         assert!(Mode::Ignore.in_tolerance(&nominal, &actual))
-    }
-
-    #[test]
-    fn no_delimiter_whole_row_is_field() {
-        let row = "my - cool - row - has - strange - delimiters";
-        let delimiters = Delimiters {
-            field_delimiter: None,
-            decimal_separator: None,
-        };
-        let split_result = split_row(row, &delimiters);
-        assert_eq!(split_result.len(), 1);
-        let value = split_result.first().unwrap();
-        assert_eq!(value.get_string().as_deref().unwrap(), row);
     }
 
     #[test]

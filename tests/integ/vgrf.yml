@@ -9,6 +9,8 @@ rules:
         - Absolute: 1.0
         - Relative: 0.1
       exclude_field_regex: "Excluded"
+      preprocessing:
+        - ExtractHeaders
 
   - name: "HTML-Compare strict"
     pattern_exclude:

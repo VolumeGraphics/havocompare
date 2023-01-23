@@ -1,5 +1,6 @@
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, JsonSchema, Deserialize, Serialize, PartialEq)]
@@ -75,7 +76,7 @@ impl Value {
                 unit: field_split.get(1).map(|&s| s.to_owned()),
             })
         } else {
-            Value::String(s.to_owned())
+            Value::String(s.trim().to_owned())
         }
     }
 
@@ -91,5 +92,23 @@ impl Value {
             Value::String(string) => Some(string.to_owned()),
             _ => None,
         }
+    }
+
+    pub fn as_str(&self) -> Cow<str> {
+        match self {
+            Value::String(str) => str.as_str().into(),
+            Value::Quantity(quant) => quant.to_string().into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn trimming() {
+        let val_spaced = Value::from_str(" value ", &None);
+        let reference = Value::from_str("value", &None);
+        assert_eq!(val_spaced, reference);
     }
 }
