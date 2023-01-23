@@ -76,7 +76,7 @@ impl Value {
                 unit: field_split.get(1).map(|&s| s.to_owned()),
             })
         } else {
-            Value::String(s.to_owned())
+            Value::String(s.trim().to_owned())
         }
     }
 
