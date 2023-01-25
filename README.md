@@ -190,6 +190,7 @@ Currently we only support SHA-256 but more checks can be added easily.
   - Allows string-literals containing unescaped field separators (field1, "field2, but as literal", field3)
   - Allows multi-line string literals with quotes
 - CSVs with non-rectangular format will now fail
+- Include files which has error and can't be compared to the report
 
 ### 0.1.4
 - Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
