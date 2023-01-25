@@ -264,7 +264,7 @@ fn process_rule(
         .for_each(|(n, a)| {
             let compare_result = process_file(n, a, rule);
 
-            all_okay &= compare_result.is_error;
+            all_okay &= !compare_result.is_error;
 
             compare_results.push(compare_result);
         });
@@ -281,35 +281,40 @@ pub fn compare_folders_cfg(
 ) -> Result<bool, Error> {
     let mut rule_results: Vec<report::RuleResult> = Vec::new();
 
-    let mut results = config_struct.rules.into_iter().map(|rule| {
-        let mut compare_results: Vec<FileCompareResult> = Vec::new();
-        let okay = process_rule(
-            nominal.as_ref(),
-            actual.as_ref(),
-            &rule,
-            &mut compare_results,
-        );
+    let results: Vec<bool> = config_struct
+        .rules
+        .into_iter()
+        .map(|rule| {
+            let mut compare_results: Vec<FileCompareResult> = Vec::new();
+            let okay = process_rule(
+                nominal.as_ref(),
+                actual.as_ref(),
+                &rule,
+                &mut compare_results,
+            );
 
-        let rule_name = rule.name.as_str();
+            let rule_name = rule.name.as_str();
 
-        let result = match okay {
-            Ok(result) => result,
-            Err(e) => {
-                println!(
-                    "Error occured during rule-processing for rule {}: {}",
-                    rule_name, e
-                );
-                false
-            }
-        };
-        rule_results.push(report::RuleResult {
-            rule,
-            compare_results,
-        });
+            let result = match okay {
+                Ok(result) => result,
+                Err(e) => {
+                    println!(
+                        "Error occured during rule-processing for rule {}: {}",
+                        rule_name, e
+                    );
+                    false
+                }
+            };
+            rule_results.push(report::RuleResult {
+                rule,
+                compare_results,
+            });
 
-        result
-    });
-    let all_okay = results.all(|result| result);
+            result
+        })
+        .collect();
+
+    let all_okay = results.iter().all(|result| *result);
     report::create(&rule_results, report_path)?;
     Ok(all_okay)
 }
