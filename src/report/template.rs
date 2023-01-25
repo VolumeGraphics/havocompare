@@ -482,3 +482,40 @@ The extracted exact text can be downloaded here: <a href="./{{ nominal_extracted
 </body>
 </html>
 "###;
+
+pub const ERROR_DETAIL_TEMPLATE: &str = r###"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Error</title>
+    <style>
+
+
+    </style>
+</head>
+<body>
+
+<p>
+	<table>
+		<tbody>
+			<tr>
+				<td>Nominal:</td>
+				<td>{{ nominal }}</td>
+			</tr>
+				<tr>
+				<td>Actual:</td>
+				<td>{{ actual }}</td>
+			</tr>
+		</tbody>
+	</table>
+</p>
+
+<p style="color:red">
+	{{ error }}
+</p>
+
+
+</body>
+</html>
+"###;

@@ -156,7 +156,7 @@ fn process_file(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-) -> Result<FileCompareResult, Box<dyn std::error::Error>> {
+) -> FileCompareResult {
     let file_name_nominal = nominal.as_ref().to_string_lossy();
     let file_name_actual = actual.as_ref().to_string_lossy();
     let _file_span = span!(tracing::Level::INFO, "Processing");
@@ -188,17 +188,21 @@ fn process_file(
             }
         };
 
-    if let Ok(compare_result) = &compare_result {
-        if compare_result.is_error {
-            error!("Files didn't match");
-        } else {
-            debug!("Files matched");
-        }
-    } else {
-        error!("Problem comparing the files");
-    }
+    match compare_result {
+        Ok(result) => {
+            if result.is_error {
+                error!("Files didn't match");
+            } else {
+                debug!("Files matched");
+            }
 
-    compare_result
+            result
+        }
+        Err(e) => {
+            error!("Problem comparing the files");
+            report::write_error_detail(nominal, actual, e, &rule.name)
+        }
+    }
 }
 
 fn get_files(
@@ -215,7 +219,7 @@ fn process_rule(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-    compare_results: &mut Vec<Result<FileCompareResult, Box<dyn std::error::Error>>>,
+    compare_results: &mut Vec<FileCompareResult>,
 ) -> Result<bool, Error> {
     let _file_span = span!(tracing::Level::INFO, "Rule");
     let _file_span = _file_span.enter();
@@ -260,10 +264,8 @@ fn process_rule(
         .for_each(|(n, a)| {
             let compare_result = process_file(n, a, rule);
 
-            all_okay &= compare_result
-                .as_ref()
-                .map(|r| !r.is_error)
-                .unwrap_or(false);
+            all_okay &= compare_result.is_error;
+
             compare_results.push(compare_result);
         });
 
@@ -280,8 +282,7 @@ pub fn compare_folders_cfg(
     let mut rule_results: Vec<report::RuleResult> = Vec::new();
 
     let mut results = config_struct.rules.into_iter().map(|rule| {
-        let mut compare_results: Vec<Result<FileCompareResult, Box<dyn std::error::Error>>> =
-            Vec::new();
+        let mut compare_results: Vec<FileCompareResult> = Vec::new();
         let okay = process_rule(
             nominal.as_ref(),
             actual.as_ref(),
@@ -303,7 +304,7 @@ pub fn compare_folders_cfg(
         };
         rule_results.push(report::RuleResult {
             rule,
-            compare_results: compare_results.into_iter().filter_map(|r| r.ok()).collect(),
+            compare_results,
         });
 
         result
