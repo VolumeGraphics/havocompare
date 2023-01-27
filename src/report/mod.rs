@@ -84,11 +84,10 @@ pub fn write_html_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
-        .to_string_lossy()
-        .to_string();
     let mut result = FileCompareResult {
-        compared_file_name,
+        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
+            .to_string_lossy()
+            .to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -133,11 +132,10 @@ pub(crate) fn write_csv_detail(
     diffs: &[DiffType],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
-        .to_string_lossy()
-        .to_string();
     let mut result = FileCompareResult {
-        compared_file_name,
+        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
+            .to_string_lossy()
+            .to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -268,11 +266,10 @@ pub fn write_image_detail(
     diffs: &[String],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
-        .to_string_lossy()
-        .to_string();
     let mut result = FileCompareResult {
-        compared_file_name,
+        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
+            .to_string_lossy()
+            .to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -343,12 +340,10 @@ pub fn write_pdf_detail(
     diffs: &[(usize, String)],
     rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
-    let compared_file_name = get_relative_path(actual.as_ref(), nominal.as_ref())
-        .to_string_lossy()
-        .to_string();
-
     let mut result = FileCompareResult {
-        compared_file_name,
+        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
+            .to_string_lossy()
+            .to_string(),
         is_error: false,
         detail_path: None,
     };
@@ -413,6 +408,56 @@ pub fn write_pdf_detail(
     result.detail_path = Some(sub_folder);
 
     Ok(result)
+}
+
+fn create_error_detail(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    error: Box<dyn std::error::Error>,
+    rule_name: &str,
+) -> Result<PathBuf, Error> {
+    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref())?;
+    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+
+    let mut tera = Tera::default();
+    tera.add_raw_template(
+        &detail_file.to_string_lossy(),
+        template::ERROR_DETAIL_TEMPLATE,
+    )?;
+
+    let mut ctx = Context::new();
+    ctx.insert("actual", &actual.as_ref().to_string_lossy());
+    ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
+    ctx.insert("error", &error.to_string());
+
+    let file = fat_io_wrap_std(&detail_file, &File::create)?;
+
+    tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
+
+    Ok(sub_folder)
+}
+
+pub fn write_error_detail(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    error: Box<dyn std::error::Error>,
+    rule_name: &str,
+) -> FileCompareResult {
+    let mut result = FileCompareResult {
+        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
+            .to_string_lossy()
+            .to_string(),
+        is_error: true,
+        detail_path: None,
+    };
+
+    if let Ok(sub_folder) = create_error_detail(nominal, actual, error, rule_name) {
+        result.detail_path = Some(sub_folder);
+    } else {
+        error!("Could not create error detail");
+    }
+
+    result
 }
 
 pub(crate) fn create(
