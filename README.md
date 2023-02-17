@@ -178,11 +178,12 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ## Changelog
 
+### 0.2.3
+- bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized"
+
 ### 0.2.2
 - Include files which has error and can't be compared to the report
 - Fixed a bug which caused the program exited early out of rules-loop, and not processing all
-
-
 
 ### 0.2.0
 - Deletion of columns will no longer really delete them but replace every value with "DELETED"
