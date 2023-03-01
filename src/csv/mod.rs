@@ -56,7 +56,7 @@ pub enum Error {
 
     #[error("The files compared have different row count. Nominal: {0}, and Actual: {1}")]
     /// Files being compared have different row numbers
-    UnstableRowCount(usize, usize),
+    UnequalRowCount(usize, usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -336,7 +336,7 @@ pub(crate) fn compare_tables(
     config: &CSVCompareConfig,
 ) -> Result<Vec<DiffType>, Error> {
     if nominal.rows().len() != actual.rows().len() {
-        return Err(Error::UnstableRowCount(
+        return Err(Error::UnequalRowCount(
             nominal.rows().len(),
             actual.rows().len(),
         ));
