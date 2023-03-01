@@ -61,9 +61,11 @@ impl Quantity {
     }
 
     pub(crate) fn secure_diff(&self, rhs: &Quantity) -> FloatType {
-        let min = next_up(self.value.min(rhs.value));
-        let max = next_down(self.value.max(rhs.value));
-        (max - min).abs()
+        let min = self.value.min(rhs.value);
+        let max = self.value.max(rhs.value);
+        let min_up = next_up(min);
+        let max_down = next_down(max);
+        next_down(max_down - min_up)
     }
 }
 
@@ -155,10 +157,27 @@ impl Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::csv::Mode;
     #[test]
     fn trimming() {
         let val_spaced = Value::from_str(" value ", &None);
         let reference = Value::from_str("value", &None);
         assert_eq!(val_spaced, reference);
+    }
+
+    #[test]
+    fn test_secure_diff() {
+        for base in -30..=30 {
+            for modulation in -30..=base {
+                let magic_factor = 1.3;
+                let num_one = magic_factor * 10.0f64.powi(base);
+                let delta = magic_factor * 10.0f64.powi(modulation);
+                let compare_mode = Mode::Absolute(delta.abs());
+                let num_modulated = num_one + delta;
+                let q1 = Quantity::new(num_one, None);
+                let q2 = Quantity::new(num_modulated, None);
+                assert!(compare_mode.in_tolerance(&q1, &q2));
+            }
+        }
     }
 }
