@@ -178,6 +178,9 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ## Changelog
 
+### 0.2.4
+- add check for row lines of both compared csv files, and throw error if they are unequal
+
 ### 0.2.3
 - bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized"
 

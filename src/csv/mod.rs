@@ -53,6 +53,10 @@ pub enum Error {
     #[error("CSV format invalid: first row has a different column number then row {0}")]
     /// The embedded row number had a different column count than the first
     UnstableColumnCount(usize),
+
+    #[error("The files compared have different row count. Nominal: {0}, and Actual: {1}")]
+    /// Files being compared have different row numbers
+    UnequalRowCount(usize, usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -331,6 +335,13 @@ pub(crate) fn compare_tables(
     actual: &Table,
     config: &CSVCompareConfig,
 ) -> Result<Vec<DiffType>, Error> {
+    if nominal.rows().len() != actual.rows().len() {
+        return Err(Error::UnequalRowCount(
+            nominal.rows().len(),
+            actual.rows().len(),
+        ));
+    }
+
     let mut diffs = Vec::new();
     for (col, (col_nom, col_act)) in nominal
         .columns
