@@ -4,7 +4,6 @@ mod tokenizer;
 mod value;
 
 pub use preprocessing::Preprocessor;
-use value::FloatType;
 use value::Quantity;
 use value::Value;
 
@@ -135,9 +134,9 @@ impl Display for DiffType {
 /// comparison mode for csv cells
 pub enum Mode {
     /// `(a-b).abs() < threshold`
-    Absolute(FloatType),
+    Absolute(f64),
     /// `((a-b)/a).abs() < threshold`
-    Relative(FloatType),
+    Relative(f64),
     /// always matches
     Ignore,
 }
@@ -740,7 +739,7 @@ mod tests {
         let pairs = [
             ("0.6", Quantity::new(0.6, None)),
             ("0.6 in", Quantity::new(0.6, Some("in"))),
-            ("inf", Quantity::new(FloatType::INFINITY, None)),
+            ("inf", Quantity::new(f64::INFINITY, None)),
             ("-0.6", Quantity::new(-0.6, None)),
             ("-0.6 mm", Quantity::new(-0.6, Some("mm"))),
         ];
@@ -796,13 +795,13 @@ mod tests {
         let abs_mode = Mode::Ignore;
         assert!(abs_mode.in_tolerance(
             &Quantity::new(1.0, None),
-            &Quantity::new(FloatType::INFINITY, None)
+            &Quantity::new(f64::INFINITY, None)
         ));
     }
 
     #[test]
     fn nan_is_nan() {
-        let nan = FloatType::NAN;
+        let nan = f64::NAN;
         let nominal = Quantity {
             value: nan,
             unit: None,

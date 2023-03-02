@@ -1,5 +1,5 @@
 use crate::csv;
-use crate::csv::value::{FloatType, Value};
+use crate::csv::value::Value;
 use crate::csv::Table;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -55,7 +55,7 @@ fn delete_row_by_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
     Ok(())
 }
 
-fn get_permutation(rows_to_sort_by: &Vec<FloatType>) -> permutation::Permutation {
+fn get_permutation(rows_to_sort_by: &Vec<f64>) -> permutation::Permutation {
     permutation::sort_by(rows_to_sort_by, |a, b| b.partial_cmp(a).unwrap_or(Equal))
 }
 

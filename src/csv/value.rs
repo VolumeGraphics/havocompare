@@ -3,20 +3,18 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
-pub(crate) type FloatType = f64;
-
 #[derive(Debug, Clone, JsonSchema, Deserialize, Serialize, PartialEq)]
 pub struct Quantity {
-    pub(crate) value: FloatType,
+    pub(crate) value: f64,
     pub(crate) unit: Option<String>,
 }
 
-fn next_up(val: FloatType) -> FloatType {
-    const TINY_BITS: u64 = 0x1; // Smallest positive FloatType.
+fn next_up(val: f64) -> f64 {
+    const TINY_BITS: u64 = 0x1; // Smallest positive f64.
     const CLEAR_SIGN_MASK: u64 = 0x7fff_ffff_ffff_ffff;
 
     let bits = val.to_bits();
-    if val.is_nan() || bits == FloatType::INFINITY.to_bits() {
+    if val.is_nan() || bits == f64::INFINITY.to_bits() {
         return val;
     }
 
@@ -28,15 +26,15 @@ fn next_up(val: FloatType) -> FloatType {
     } else {
         bits - 1
     };
-    FloatType::from_bits(next_bits)
+    f64::from_bits(next_bits)
 }
 
-fn next_down(val: FloatType) -> FloatType {
-    const NEG_TINY_BITS: u64 = 0x8000_0000_0000_0001; // Smallest (in magnitude) negative f32.
+fn next_down(val: f64) -> f64 {
+    const NEG_TINY_BITS: u64 = 0x8000_0000_0000_0001; // Smallest (in magnitude) negative f64.
     const CLEAR_SIGN_MASK: u64 = 0x7fff_ffff_ffff_ffff;
 
     let bits = val.to_bits();
-    if val.is_nan() || bits == FloatType::NEG_INFINITY.to_bits() {
+    if val.is_nan() || bits == f64::NEG_INFINITY.to_bits() {
         return val;
     }
 
@@ -48,19 +46,19 @@ fn next_down(val: FloatType) -> FloatType {
     } else {
         bits + 1
     };
-    FloatType::from_bits(next_bits)
+    f64::from_bits(next_bits)
 }
 
 impl Quantity {
     #[cfg(test)]
-    pub(crate) fn new(value: FloatType, unit: Option<&str>) -> Self {
+    pub(crate) fn new(value: f64, unit: Option<&str>) -> Self {
         Self {
             unit: unit.map(|s| s.to_owned()),
             value,
         }
     }
 
-    pub(crate) fn secure_diff(&self, rhs: &Quantity) -> FloatType {
+    pub(crate) fn secure_diff(&self, rhs: &Quantity) -> f64 {
         let min = self.value.min(rhs.value);
         let max = self.value.max(rhs.value);
         let min_up = next_up(min);
@@ -104,11 +102,9 @@ impl Value {
         Value::from_str("DELETED", &None)
     }
 
-    fn get_numerical_value(field_split: &[&str]) -> Option<FloatType> {
+    fn get_numerical_value(field_split: &[&str]) -> Option<f64> {
         if field_split.len() == 1 || field_split.len() == 2 {
-            return field_split
-                .first()
-                .and_then(|s| s.parse::<FloatType>().ok());
+            return field_split.first().and_then(|s| s.parse::<f64>().ok());
         }
         None
     }
@@ -176,6 +172,7 @@ mod tests {
                 let num_modulated = num_one + delta;
                 let q1 = Quantity::new(num_one, None);
                 let q2 = Quantity::new(num_modulated, None);
+                // assert!(u_diff <= delta);
                 assert!(compare_mode.in_tolerance(&q1, &q2));
             }
         }
