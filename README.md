@@ -105,6 +105,14 @@ rules:
         - DeleteRowByNumber: 0
         # Deletes rows having any element matching the given regex (may delete different lines in nom / act!
         - DeleteRowByRegex: "Vertex_Count"
+        # Deletes the cell (column, row) by setting the value to 'DELETED'
+        - DeleteCellByNumber:
+            column: 0
+            row: 0
+        # Deletes the cell (column name, row) by setting the value to 'DELETED'. This needs `ExtractHeaders`
+        - DeleteCellByName:
+            column: "Column to delete"
+            row: 0
 ```
 
 #### Image comparison
@@ -180,6 +188,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal
+- Add deletion by cell
 
 ### 0.2.3
 - bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized"

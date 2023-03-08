@@ -23,6 +23,20 @@ pub enum Preprocessor {
     DeleteRowByNumber(usize),
     /// Replace all fields in row  where at least a single field matches regex by a deleted marker
     DeleteRowByRegex(String),
+    /// replace found cell using row and columnd index by a deleted marker
+    DeleteCellByNumber {
+        /// column number
+        column: usize,
+        /// row number
+        row: usize,
+    },
+    /// replace found cell using column header and row index by a deleted marker
+    DeleteCellByName {
+        /// column with given name
+        column: String,
+        /// row number
+        row: usize,
+    },
 }
 
 impl Preprocessor {
@@ -35,6 +49,12 @@ impl Preprocessor {
             Preprocessor::SortByColumnNumber(id) => sort_by_column_id(table, *id),
             Preprocessor::DeleteRowByNumber(id) => delete_row_by_number(table, *id),
             Preprocessor::DeleteRowByRegex(regex) => delete_row_by_regex(table, regex),
+            Preprocessor::DeleteCellByNumber { column, row } => {
+                delete_cell_by_number(table, *column, *row)
+            }
+            Preprocessor::DeleteCellByName { column, row } => {
+                delete_cell_by_column_name_and_row_number(table, column, *row)
+            }
         }
     }
 }
@@ -52,6 +72,47 @@ fn delete_row_by_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
     if let Some(mut v) = table.rows_mut().nth(id) {
         v.iter_mut().for_each(|v| **v = Value::deleted())
     }
+    Ok(())
+}
+
+fn delete_cell_by_number(table: &mut Table, column: usize, row: usize) -> Result<(), csv::Error> {
+    let value = table
+        .columns
+        .get_mut(column)
+        .ok_or_else(|| {
+            csv::Error::InvalidAccess(format!("Cell with column number {} not found.", column))
+        })?
+        .rows
+        .get_mut(row)
+        .ok_or_else(|| {
+            csv::Error::InvalidAccess(format!("Cell with row number {} not found.", row))
+        })?;
+
+    *value = Value::deleted();
+
+    Ok(())
+}
+
+fn delete_cell_by_column_name_and_row_number(
+    table: &mut Table,
+    column: &str,
+    row: usize,
+) -> Result<(), csv::Error> {
+    let value = table
+        .columns
+        .iter_mut()
+        .find(|col| col.header.as_deref().unwrap_or_default() == column)
+        .ok_or_else(|| {
+            csv::Error::InvalidAccess(format!("Cell with column name '{}' not found.", column))
+        })?
+        .rows
+        .get_mut(row)
+        .ok_or_else(|| {
+            csv::Error::InvalidAccess(format!("Cell with row number {} not found.", row))
+        })?;
+
+    *value = Value::deleted();
+
     Ok(())
 }
 
@@ -329,5 +390,96 @@ mod tests {
 
         let order_by_id = sort_by_column_id(&mut table, 999);
         assert!(matches!(order_by_id.unwrap_err(), Error::InvalidAccess(_)));
+    }
+
+    #[test]
+    fn test_delete_cell_by_numb() {
+        let mut table = setup_table(None);
+        delete_cell_by_number(&mut table, 1, 2).unwrap();
+
+        assert_eq!(
+            table
+                .columns
+                .get(1)
+                .unwrap()
+                .rows
+                .get(2)
+                .unwrap()
+                .get_string()
+                .as_deref()
+                .unwrap(),
+            "DELETED"
+        );
+
+        assert_ne!(
+            table
+                .columns
+                .get(1)
+                .unwrap()
+                .rows
+                .first()
+                .unwrap()
+                .get_string()
+                .as_deref()
+                .unwrap(),
+            "DELETED"
+        );
+
+        assert_eq!(
+            table
+                .columns
+                .first()
+                .unwrap()
+                .rows
+                .get(1)
+                .unwrap()
+                .get_string(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_delete_cell_by_name() {
+        let mut table = setup_table(None);
+        extract_headers(&mut table).unwrap();
+        delete_cell_by_column_name_and_row_number(&mut table, "Surface [mm²]", 1).unwrap();
+
+        assert_eq!(
+            table
+                .columns
+                .get(1)
+                .unwrap()
+                .rows
+                .get(1)
+                .unwrap()
+                .get_string()
+                .as_deref()
+                .unwrap(),
+            "DELETED"
+        );
+
+        assert_eq!(
+            table
+                .columns
+                .get(1)
+                .unwrap()
+                .rows
+                .get(3)
+                .unwrap()
+                .get_string(),
+            None
+        );
+
+        assert_eq!(
+            table
+                .columns
+                .get(0)
+                .unwrap()
+                .rows
+                .get(1)
+                .unwrap()
+                .get_string(),
+            None
+        );
     }
 }
