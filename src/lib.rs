@@ -167,24 +167,19 @@ fn process_file(
     let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> =
         match &rule.file_type {
             ComparisonMode::CSV(conf) => {
-                csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-                    .map_err(|e| e.into())
+                csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
             ComparisonMode::Image(conf) => {
-                image::compare_paths(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-                    .map_err(|e| e.into())
+                image::compare_paths(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
             ComparisonMode::PlainText(conf) => {
-                html::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-                    .map_err(|e| e.into())
+                html::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
             ComparisonMode::Hash(conf) => {
-                hash::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-                    .map_err(|e| e.into())
+                hash::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
             ComparisonMode::PDFText(conf) => {
-                pdf::compare_files(nominal.as_ref(), actual.as_ref(), conf, &rule.name)
-                    .map_err(|e| e.into())
+                pdf::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
         };
 
@@ -200,7 +195,7 @@ fn process_file(
         }
         Err(e) => {
             error!("Problem comparing the files");
-            report::write_error_detail(nominal, actual, e, &rule.name)
+            report::write_error_detail(nominal, actual, e)
         }
     }
 }
