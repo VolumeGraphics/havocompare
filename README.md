@@ -189,7 +189,8 @@ Currently we only support SHA-256 but more checks can be added easily.
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal
 - Add deletion by cell
-- simplify report sub-folders creation: sub-folders are now created temporarily in the temp folder instead of in the current working folder.
+- Simplify report sub-folders creation: sub-folders are now created temporarily in the temp folder instead of in the current working folder
+- Change report row numbering to always start with 0, so row deletion is more understandable
 
 ### 0.2.3
 - bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized"

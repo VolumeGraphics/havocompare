@@ -297,8 +297,8 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
     <thead>
     {% if headers.columns|length > 0 %}
     	<tr>
-	    	<th>1{% if headers.has_diff %}<br>&nbsp;{% endif %}</th>
-	    	<th>{% if headers.has_diff %}&nbsp;<br>{% endif %}1</th>
+	    	<th>{% if headers.has_diff %}<br>&nbsp;{% endif %}</th>
+	    	<th>{% if headers.has_diff %}&nbsp;<br>{% endif %}</th>
 			{% for col in headers.columns %}
 				<th>
 					{{ col.nominal_value }}
@@ -321,8 +321,8 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
     <tbody>
         {% for row in rows %}
             <tr {% if row.has_error %} class="error" {% endif %}>
-            	<td data-order="{{ loop.index }}">{{ loop.index + row_index_increment }}{% if row.has_diff or row.has_error %}<br>&nbsp;{% endif %}</td>
-            	<td data-order="{{ loop.index }}">{% if row.has_diff or row.has_error %}&nbsp;<br>{% endif %}{{ loop.index + row_index_increment }}</td>
+            	<td data-order="{{ loop.index0 }}">{{ loop.index0 }}{% if row.has_diff or row.has_error %}<br>&nbsp;{% endif %}</td>
+            	<td data-order="{{ loop.index0 }}">{% if row.has_diff or row.has_error %}&nbsp;<br>{% endif %}{{ loop.index0 }}</td>
             	{% for col in row.columns %}
 					<td>
 					{{ col.nominal_value }}
