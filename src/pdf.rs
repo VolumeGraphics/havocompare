@@ -24,7 +24,6 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &HTMLCompareConfig,
-    rule_name: &str,
 ) -> Result<report::FileCompareResult, Error> {
     info!("Extracting text from actual pdf");
     let actual = extract_text(actual_path.as_ref())?;
@@ -65,7 +64,6 @@ pub fn compare_files<P: AsRef<Path>>(
         &nominal,
         &actual,
         &diffs,
-        rule_name,
     )?)
 }
 
@@ -79,7 +77,6 @@ mod test {
             "tests/pdf/actual.pdf",
             "tests/pdf/expected.pdf",
             &HTMLCompareConfig::default(),
-            "",
         )
         .unwrap();
         assert!(result.is_error);
@@ -88,7 +85,6 @@ mod test {
             "tests/pdf/actual.pdf",
             "tests/pdf/actual.pdf",
             &HTMLCompareConfig::default(),
-            "",
         )
         .unwrap();
         assert!(!result.is_error);
@@ -103,7 +99,6 @@ mod test {
                 threshold: 1.0,
                 ignore_lines: Some(vec!["/ w o r k s p a c e /".to_owned()]),
             },
-            "",
         )
         .unwrap();
         assert!(!result.is_error);

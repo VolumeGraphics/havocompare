@@ -62,7 +62,6 @@ pub fn compare_files<P: AsRef<Path>>(
     actual_path: P,
     nominal_path: P,
     config: &HashConfig,
-    rule_name: &str,
 ) -> Result<report::FileCompareResult, Error> {
     let act = config
         .function
@@ -85,7 +84,6 @@ pub fn compare_files<P: AsRef<Path>>(
         nominal_path,
         actual_path,
         diff.as_slice(),
-        rule_name,
     )?)
 }
 
@@ -117,7 +115,7 @@ mod test {
     #[test]
     fn identity_outer() {
         let file = "tests/integ.rs";
-        let result = compare_files(file, file, &HashConfig::default(), "test").unwrap();
+        let result = compare_files(file, file, &HashConfig::default()).unwrap();
         assert!(!result.is_error);
     }
 
@@ -126,7 +124,7 @@ mod test {
         let file_act = "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg";
         let file_nominal = "tests/integ/data/images/expected/SaveImage_100DPI_default_size.jpg";
 
-        let result = compare_files(file_act, file_nominal, &HashConfig::default(), "test").unwrap();
+        let result = compare_files(file_act, file_nominal, &HashConfig::default()).unwrap();
         assert!(result.is_error);
     }
 }

@@ -30,7 +30,6 @@ test-log = {version="0.2", features=["trace"]}
 strsim = "0.10"
 itertools = "0.10"
 tera = "1.17"
-md5 = "0.7.0"
 sha2 = "0.10"
 data-encoding = "2.3"
 permutation = "0.4"
@@ -38,9 +37,10 @@ pdf-extract = "0.6.4"
 vg_errortools = "0.1"
 rayon = "1.6"
 enable-ansi-support = "0.2"
+tempfile = "3.3"
+fs_extra = "1.3"
 
 [dev-dependencies]
-tempfile = "3.3"
 env_logger = "0.10"
 tracing = {version = "0.1", default-features = false}
 tracing-subscriber = {version = "0.3", default-features = false, features = ["env-filter", "fmt"]}
