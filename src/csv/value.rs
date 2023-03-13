@@ -32,7 +32,7 @@ fn next_up(val: FloatType) -> FloatType {
 }
 
 fn next_down(val: FloatType) -> FloatType {
-    const NEG_TINY_BITS: u64 = 0x8000_0000_0000_0001; // Smallest (in magnitude) negative f32.
+    const NEG_TINY_BITS: u64 = 0x8000_0000_0000_0001; // Smallest (in magnitude) negative FloatType.
     const CLEAR_SIGN_MASK: u64 = 0x7fff_ffff_ffff_ffff;
 
     let bits = val.to_bits();
