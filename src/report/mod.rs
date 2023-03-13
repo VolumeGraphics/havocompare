@@ -206,7 +206,7 @@ pub(crate) fn write_csv_detail(
                             .map(|diff| match diff {
                                 DiffType::UnequalStrings { .. } => "Different strings".to_owned(),
                                 DiffType::OutOfTolerance { mode, .. } => {
-                                    format!("Out of tolerance. Mode: {}", mode)
+                                    format!("Out of tolerance. Mode: {mode}")
                                 }
                                 DiffType::DifferentValueTypes { .. } => {
                                     "Different value types".to_owned()

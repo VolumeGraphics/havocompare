@@ -293,10 +293,7 @@ pub fn compare_folders_cfg(
             let result = match okay {
                 Ok(result) => result,
                 Err(e) => {
-                    println!(
-                        "Error occured during rule-processing for rule {}: {}",
-                        rule_name, e
-                    );
+                    println!("Error occurred during rule-processing for rule {rule_name}: {e}");
                     false
                 }
             };

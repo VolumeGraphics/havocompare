@@ -5,17 +5,66 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, JsonSchema, Deserialize, Serialize, PartialEq)]
 pub struct Quantity {
-    pub(crate) value: f32,
+    pub(crate) value: f64,
     pub(crate) unit: Option<String>,
+}
+
+fn next_up(val: f64) -> f64 {
+    const TINY_BITS: u64 = 0x1; // Smallest positive f64.
+    const CLEAR_SIGN_MASK: u64 = 0x7fff_ffff_ffff_ffff;
+
+    let bits = val.to_bits();
+    if val.is_nan() || bits == f64::INFINITY.to_bits() {
+        return val;
+    }
+
+    let abs = bits & CLEAR_SIGN_MASK;
+    let next_bits = if abs == 0 {
+        TINY_BITS
+    } else if bits == abs {
+        bits + 1
+    } else {
+        bits - 1
+    };
+    f64::from_bits(next_bits)
+}
+
+fn next_down(val: f64) -> f64 {
+    const NEG_TINY_BITS: u64 = 0x8000_0000_0000_0001; // Smallest (in magnitude) negative f64.
+    const CLEAR_SIGN_MASK: u64 = 0x7fff_ffff_ffff_ffff;
+
+    let bits = val.to_bits();
+    if val.is_nan() || bits == f64::NEG_INFINITY.to_bits() {
+        return val;
+    }
+
+    let abs: u64 = bits & CLEAR_SIGN_MASK;
+    let next_bits = if abs == 0 {
+        NEG_TINY_BITS
+    } else if bits == abs {
+        bits - 1
+    } else {
+        bits + 1
+    };
+    f64::from_bits(next_bits)
 }
 
 impl Quantity {
     #[cfg(test)]
-    pub(crate) fn new(value: f32, unit: Option<&str>) -> Self {
+    pub(crate) fn new(value: f64, unit: Option<&str>) -> Self {
         Self {
             unit: unit.map(|s| s.to_owned()),
             value,
         }
+    }
+
+    /// This avoids the issue of `(a - b) > d` for `b = a + d` with small `d`
+    pub(crate) fn minimal_diff(&self, rhs: &Quantity) -> f64 {
+        let min = self.value.min(rhs.value);
+        let max = self.value.max(rhs.value);
+        let min_up = next_up(min);
+        let max_down = next_down(max);
+        next_down(max_down - min_up)
     }
 }
 
@@ -39,10 +88,10 @@ impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             Value::Quantity(val) => {
-                write!(f, "{}", val).unwrap();
+                write!(f, "{val}").unwrap();
             }
             Value::String(val) => {
-                write!(f, "'{}'", val).unwrap();
+                write!(f, "'{val}'").unwrap();
             }
         }
         Ok(())
@@ -54,9 +103,9 @@ impl Value {
         Value::from_str("DELETED", &None)
     }
 
-    fn get_numerical_value(field_split: &[&str]) -> Option<f32> {
+    fn get_numerical_value(field_split: &[&str]) -> Option<f64> {
         if field_split.len() == 1 || field_split.len() == 2 {
-            return field_split.first().and_then(|s| s.parse::<f32>().ok());
+            return field_split.first().and_then(|s| s.parse::<f64>().ok());
         }
         None
     }
@@ -105,10 +154,28 @@ impl Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::csv::Mode;
     #[test]
     fn trimming() {
         let val_spaced = Value::from_str(" value ", &None);
         let reference = Value::from_str("value", &None);
         assert_eq!(val_spaced, reference);
+    }
+
+    #[test]
+    fn test_secure_diff() {
+        for base in -30..=30 {
+            for modulation in -30..=base {
+                let magic_factor = 1.3;
+                let num_one = magic_factor * 10.0f64.powi(base);
+                let delta = magic_factor * 10.0f64.powi(modulation);
+                let compare_mode = Mode::Absolute(delta.abs());
+                let num_modulated = num_one + delta;
+                let q1 = Quantity::new(num_one, None);
+                let q2 = Quantity::new(num_modulated, None);
+                // assert!(u_diff <= delta);
+                assert!(compare_mode.in_tolerance(&q1, &q2));
+            }
+        }
     }
 }

@@ -191,6 +191,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 - Add deletion by cell
 - Simplify report sub-folders creation: sub-folders are now created temporarily in the temp folder instead of in the current working folder
 - Change report row numbering to always start with 0, so row deletion is more understandable
+- fix floating point value comparison of non-displayable diff values
 
 ### 0.2.3
 - bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized"
