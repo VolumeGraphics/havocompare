@@ -134,9 +134,9 @@ impl Display for DiffType {
 /// comparison mode for csv cells
 pub enum Mode {
     /// `(a-b).abs() < threshold`
-    Absolute(f32),
+    Absolute(f64),
     /// `((a-b)/a).abs() < threshold`
-    Relative(f32),
+    Relative(f64),
     /// always matches
     Ignore,
 }
@@ -145,10 +145,10 @@ impl Display for Mode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             Mode::Absolute(tolerance) => {
-                write!(f, "Absolute (tol: {})", tolerance).unwrap_or_default();
+                write!(f, "Absolute (tol: {tolerance})").unwrap_or_default();
             }
             Mode::Relative(tolerance) => {
-                write!(f, "Relative (tol: {})", tolerance).unwrap_or_default();
+                write!(f, "Relative (tol: {tolerance})").unwrap_or_default();
             }
             Mode::Ignore => {
                 write!(f, "Ignored").unwrap_or_default();
@@ -163,20 +163,32 @@ impl Mode {
         if nominal.value.is_nan() && actual.value.is_nan() {
             return true;
         }
-
         match self {
             Mode::Absolute(tolerance) => {
-                let numerically = (nominal.value - actual.value).abs() <= *tolerance;
+                let plain_diff = (nominal.value - actual.value).abs();
+                let numerically = if plain_diff == 0.0 {
+                    true
+                } else if *tolerance == 0.0 {
+                    false
+                } else {
+                    let diff = nominal.minimal_diff(actual);
+                    diff <= *tolerance
+                };
+
                 let identical_units = nominal.unit == actual.unit;
                 numerically && identical_units
             }
             Mode::Ignore => true,
             Mode::Relative(tolerance) => {
-                let diff = (nominal.value - actual.value).abs();
-                let numerically = if diff == 0.0 {
+                let plain_diff = (nominal.value - actual.value).abs();
+                let numerically = if plain_diff == 0.0 {
                     true
+                } else if *tolerance == 0.0 {
+                    false
                 } else {
-                    (diff / nominal.value).abs() <= *tolerance
+                    let diff = nominal.minimal_diff(actual);
+                    let diff = (diff / nominal.value).abs();
+                    diff <= *tolerance
                 };
                 let identical_units = nominal.unit == actual.unit;
                 numerically && identical_units
@@ -502,11 +514,11 @@ mod tests {
             actual: ACTUAL.to_string(),
             position: mk_position(),
         };
-        let msg = format!("{}", string_unequal);
+        let msg = format!("{string_unequal}");
         assert!(msg.contains(NOMINAL));
         assert!(msg.contains(ACTUAL));
-        assert!(msg.contains(format!("{}", POS_COL).as_str()));
-        assert!(msg.contains(format!("{}", POS_ROW).as_str()));
+        assert!(msg.contains(format!("{POS_COL}").as_str()));
+        assert!(msg.contains(format!("{POS_ROW}").as_str()));
     }
 
     #[test]
@@ -523,13 +535,13 @@ mod tests {
             mode: Mode::Absolute(11.0),
             position: mk_position(),
         };
-        let msg = format!("{}", string_unequal);
+        let msg = format!("{string_unequal}");
         assert!(msg.contains("10 mm"));
         assert!(msg.contains("11"));
         assert!(msg.contains("12 um"));
         assert!(msg.contains("Absolute"));
-        assert!(msg.contains(format!("{}", POS_COL).as_str()));
-        assert!(msg.contains(format!("{}", POS_ROW).as_str()));
+        assert!(msg.contains(format!("{POS_COL}").as_str()));
+        assert!(msg.contains(format!("{POS_ROW}").as_str()));
     }
 
     #[test]
@@ -539,11 +551,11 @@ mod tests {
             actual: Value::from_str(ACTUAL, &None),
             position: mk_position(),
         };
-        let msg = format!("{}", string_unequal);
+        let msg = format!("{string_unequal}");
         assert!(msg.contains("10 mm"));
         assert!(msg.contains(ACTUAL));
-        assert!(msg.contains(format!("{}", POS_COL).as_str()));
-        assert!(msg.contains(format!("{}", POS_ROW).as_str()));
+        assert!(msg.contains(format!("{POS_COL}").as_str()));
+        assert!(msg.contains(format!("{POS_ROW}").as_str()));
     }
 
     #[test]
@@ -668,17 +680,17 @@ mod tests {
     #[test]
     fn mode_formatting() {
         let abs = Mode::Absolute(0.1);
-        let msg = format!("{}", abs);
+        let msg = format!("{abs}");
         assert!(msg.contains("0.1"));
         assert!(msg.contains("Absolute"));
 
         let abs = Mode::Relative(0.1);
-        let msg = format!("{}", abs);
+        let msg = format!("{abs}");
         assert!(msg.contains("0.1"));
         assert!(msg.contains("Relative"));
 
         let abs = Mode::Ignore;
-        let msg = format!("{}", abs);
+        let msg = format!("{abs}");
         assert!(msg.contains("Ignored"));
     }
 
@@ -727,7 +739,7 @@ mod tests {
         let pairs = [
             ("0.6", Quantity::new(0.6, None)),
             ("0.6 in", Quantity::new(0.6, Some("in"))),
-            ("inf", Quantity::new(f32::INFINITY, None)),
+            ("inf", Quantity::new(f64::INFINITY, None)),
             ("-0.6", Quantity::new(-0.6, None)),
             ("-0.6 mm", Quantity::new(-0.6, Some("mm"))),
         ];
@@ -758,15 +770,15 @@ mod tests {
 
     #[test]
     fn basic_compare_modes_test_relative() {
-        let abs_mode = Mode::Relative(1.0);
-        assert!(abs_mode.in_tolerance(&Quantity::new(1.0, None), &Quantity::new(2.0, None)));
-        assert!(abs_mode.in_tolerance(&Quantity::new(2.0, None), &Quantity::new(4.0, None)));
-        assert!(abs_mode.in_tolerance(&Quantity::new(-1.0, None), &Quantity::new(-2.0, None)));
-        assert!(abs_mode.in_tolerance(&Quantity::new(-2.0, None), &Quantity::new(-4.0, None)));
-        assert!(abs_mode.in_tolerance(&Quantity::new(0.0, None), &Quantity::new(0.0, None)));
+        let rel_mode = Mode::Relative(1.0);
+        assert!(rel_mode.in_tolerance(&Quantity::new(1.0, None), &Quantity::new(2.0, None)));
+        assert!(rel_mode.in_tolerance(&Quantity::new(2.0, None), &Quantity::new(4.0, None)));
+        assert!(rel_mode.in_tolerance(&Quantity::new(-1.0, None), &Quantity::new(-2.0, None)));
+        assert!(rel_mode.in_tolerance(&Quantity::new(-2.0, None), &Quantity::new(-4.0, None)));
+        assert!(rel_mode.in_tolerance(&Quantity::new(0.0, None), &Quantity::new(0.0, None)));
 
-        assert!(!abs_mode.in_tolerance(&Quantity::new(1.0, None), &Quantity::new(2.01, None)));
-        assert!(!abs_mode.in_tolerance(&Quantity::new(2.0, None), &Quantity::new(4.01, None)));
+        assert!(!rel_mode.in_tolerance(&Quantity::new(1.0, None), &Quantity::new(2.01, None)));
+        assert!(!rel_mode.in_tolerance(&Quantity::new(2.0, None), &Quantity::new(4.01, None)));
     }
 
     #[test]
@@ -783,13 +795,13 @@ mod tests {
         let abs_mode = Mode::Ignore;
         assert!(abs_mode.in_tolerance(
             &Quantity::new(1.0, None),
-            &Quantity::new(f32::INFINITY, None)
+            &Quantity::new(f64::INFINITY, None)
         ));
     }
 
     #[test]
     fn nan_is_nan() {
-        let nan = f32::NAN;
+        let nan = f64::NAN;
         let nominal = Quantity {
             value: nan,
             unit: None,
@@ -892,6 +904,27 @@ mod tests {
         .unwrap();
         for col in table.columns.iter() {
             assert_eq!(col.rows.len(), table.columns.first().unwrap().rows.len());
+        }
+    }
+
+    #[test]
+    fn test_float_diff_precision() {
+        let magic_first = 0.03914;
+        let magic_second = 0.03913;
+        let tolerance = 0.00001;
+        let tolerance_f64 = 0.00001;
+
+        let single_diff: f32 = magic_first - magic_second;
+        assert!(single_diff > tolerance);
+
+        let quantity1 = Quantity::new(0.03914, None);
+        let quantity2 = Quantity::new(0.03913, None);
+        let modes = [
+            Mode::Absolute(tolerance_f64),
+            Mode::Relative(tolerance_f64 / 0.03914),
+        ];
+        for mode in modes {
+            assert!(mode.in_tolerance(&quantity1, &quantity2));
         }
     }
 }

@@ -20,8 +20,7 @@ fn guess_format_from_line(
             if let Some(cap) = capture {
                 field_separator = Some(cap[1].chars().next().ok_or_else(|| {
                     Error::InvalidAccess(format!(
-                        "Could not capture field separator for guessing from '{}'",
-                        line
+                        "Could not capture field separator for guessing from '{line}'"
                     ))
                 })?);
             }
@@ -38,7 +37,7 @@ fn guess_format_from_line(
         decimal_separator_candidates.into_iter().join("")
     };
 
-    let decimal_separator_regex_string = format!(r"\d([{}])\d", context_acceptable_candidates);
+    let decimal_separator_regex_string = format!(r"\d([{context_acceptable_candidates}])\d");
     debug!(
         "Regex for decimal sep: '{}'",
         decimal_separator_regex_string.as_str()
@@ -49,8 +48,7 @@ fn guess_format_from_line(
     for capture in decimal_separator_regex.captures_iter(line) {
         let sep = capture[1].chars().next().ok_or_else(|| {
             Error::InvalidAccess(format!(
-                "Could not capture decimal separator for guessing from '{}'",
-                line
+                "Could not capture decimal separator for guessing from '{line}'"
             ))
         })?;
         if let Some(entry) = separators.get_mut(&sep) {

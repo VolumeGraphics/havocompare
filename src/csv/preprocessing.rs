@@ -55,7 +55,7 @@ fn delete_row_by_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
     Ok(())
 }
 
-fn get_permutation(rows_to_sort_by: &Vec<f32>) -> permutation::Permutation {
+fn get_permutation(rows_to_sort_by: &Vec<f64>) -> permutation::Permutation {
     permutation::sort_by(rows_to_sort_by, |a, b| b.partial_cmp(a).unwrap_or(Equal))
 }
 
@@ -68,8 +68,7 @@ fn apply_permutation(table: &mut Table, mut permutation: permutation::Permutatio
 fn sort_by_column_id(table: &mut Table, id: usize) -> Result<(), csv::Error> {
     let sort_master_col = table.columns.get(id).ok_or_else(|| {
         csv::Error::InvalidAccess(format!(
-            "Column number sorting by id {} requested but column not found.",
-            id
+            "Column number sorting by id {id} requested but column not found."
         ))
     })?;
     let col_floats: Result<Vec<_>, csv::Error> = sort_master_col
@@ -96,8 +95,7 @@ fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> 
         .find(|c| c.header.as_deref().unwrap_or_default() == name)
         .ok_or_else(|| {
             csv::Error::InvalidAccess(format!(
-                "Requested format sorting by column'{}' but column not found.",
-                name
+                "Requested format sorting by column'{name}' but column not found."
             ))
         })?;
     let col_floats: Result<Vec<_>, csv::Error> = sort_master_col
