@@ -58,7 +58,8 @@ impl Quantity {
         }
     }
 
-    pub(crate) fn secure_diff(&self, rhs: &Quantity) -> f64 {
+    /// This avoids the issue of `(a - b) > d` for `b = a + d` with small `d`
+    pub(crate) fn minimal_diff(&self, rhs: &Quantity) -> f64 {
         let min = self.value.min(rhs.value);
         let max = self.value.max(rhs.value);
         let min_up = next_up(min);

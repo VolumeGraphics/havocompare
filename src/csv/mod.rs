@@ -171,7 +171,7 @@ impl Mode {
                 } else if *tolerance == 0.0 {
                     false
                 } else {
-                    let diff = nominal.secure_diff(actual);
+                    let diff = nominal.minimal_diff(actual);
                     diff <= *tolerance
                 };
 
@@ -186,7 +186,7 @@ impl Mode {
                 } else if *tolerance == 0.0 {
                     false
                 } else {
-                    let diff = nominal.secure_diff(actual);
+                    let diff = nominal.minimal_diff(actual);
                     let diff = (diff / nominal.value).abs();
                     diff <= *tolerance
                 };
