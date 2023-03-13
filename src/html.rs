@@ -58,7 +58,6 @@ pub fn compare_files<P: AsRef<Path>>(
     actual_path: P,
     nominal_path: P,
     config: &HTMLCompareConfig,
-    rule_name: &str,
 ) -> Result<report::FileCompareResult, Error> {
     let actual = BufReader::new(fat_io_wrap_std(actual_path.as_ref(), &File::open)?);
     let nominal = BufReader::new(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?);
@@ -95,7 +94,6 @@ pub fn compare_files<P: AsRef<Path>>(
         nominal_path.as_ref(),
         actual_path.as_ref(),
         &diffs,
-        rule_name,
     )?)
 }
 
@@ -110,7 +108,6 @@ mod test {
                 "tests/html/test.html",
                 "tests/html/test.html",
                 &HTMLCompareConfig::default(),
-                ""
             )
             .unwrap()
             .is_error
@@ -121,22 +118,12 @@ mod test {
     fn test_modified() {
         let actual = "tests/html/test.html";
         let nominal = "tests/html/html_changed.html";
-        let rule_name = "";
 
-        let result =
-            compare_files(actual, nominal, &HTMLCompareConfig::default(), rule_name).unwrap();
+        let result = compare_files(actual, nominal, &HTMLCompareConfig::default()).unwrap();
 
         assert!(result.is_error);
 
         assert!(result.detail_path.is_some());
-
-        std::fs::remove_dir_all(
-            result
-                .detail_path
-                .ok_or("detail_path has None value")
-                .unwrap(),
-        )
-        .unwrap();
     }
 
     #[test]
@@ -149,7 +136,6 @@ mod test {
                     threshold: 0.9,
                     ignore_lines: None
                 },
-                ""
             )
             .unwrap()
             .is_error
@@ -166,7 +152,6 @@ mod test {
                     threshold: 1.0,
                     ignore_lines: Some(vec!["stylesheet".to_owned()])
                 },
-                ""
             )
             .unwrap()
             .is_error

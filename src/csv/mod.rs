@@ -468,7 +468,6 @@ pub(crate) fn compare_paths(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     config: &CSVCompareConfig,
-    rule_name: &str,
 ) -> Result<report::FileCompareResult, Error> {
     let nominal_file = fat_io_wrap_std(nominal.as_ref(), &File::open)?;
     let actual_file = fat_io_wrap_std(actual.as_ref(), &File::open)?;
@@ -485,7 +484,6 @@ pub(crate) fn compare_paths(
         nominal.as_ref(),
         actual.as_ref(),
         results.as_slice(),
-        rule_name,
     )?)
 }
 
@@ -891,7 +889,7 @@ mod tests {
             exclude_field_regex: None,
             preprocessing: None,
         };
-        let result = compare_paths("non_existing", "also_non_existing", &conf, "test");
+        let result = compare_paths("non_existing", "also_non_existing", &conf);
         assert!(matches!(result.unwrap_err(), Error::FileAccessFailed(_)));
     }
 

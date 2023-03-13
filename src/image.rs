@@ -42,7 +42,6 @@ pub fn compare_paths<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &ImageCompareConfig,
-    rule_name: &str,
 ) -> Result<report::FileCompareResult, Error> {
     let mut diffs: Vec<String> = Vec::new();
     let nominal = image::open(nominal_path.as_ref())?.into_rgb8();
@@ -77,7 +76,6 @@ pub fn compare_paths<P: AsRef<Path>>(
         nominal_path.as_ref(),
         actual_path.as_ref(),
         &diffs,
-        rule_name,
     )?)
 }
 
@@ -91,7 +89,6 @@ mod test {
             "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
             "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
             &ImageCompareConfig { threshold: 1.0 },
-            "test-rule",
         )
         .unwrap();
         assert!(!result.is_error);
@@ -103,7 +100,6 @@ mod test {
             "tests/integ/data/images/expected/SaveImage_100DPI_default_size.jpg",
             "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
             &ImageCompareConfig { threshold: 1.0 },
-            "test-rule",
         )
         .unwrap();
         assert!(result.is_error);
@@ -112,6 +108,7 @@ mod test {
             result
                 .detail_path
                 .unwrap()
+                .temp_path
                 .join("SaveImage_100DPI_default_size.jpgdiff_image.png"),
         )
         .expect("Could not load generated diff image")

@@ -1,12 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ConfigurationFile",
+  "description": "Represents a whole configuration file consisting of several comparison rules",
   "type": "object",
   "required": [
     "rules"
   ],
   "properties": {
     "rules": {
+      "description": "A list of all rules to be checked on run",
       "type": "array",
       "items": {
         "$ref": "#/definitions/Rule"
@@ -15,18 +17,21 @@
   },
   "definitions": {
     "CSVCompareConfig": {
+      "description": "Settings for the CSV comparison module",
       "type": "object",
       "required": [
         "comparison_modes"
       ],
       "properties": {
         "comparison_modes": {
+          "description": "How numerical values shall be compared, strings are always checked for identity",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Mode"
           }
         },
         "decimal_separator": {
+          "description": "The decimal separator for floating point numbers (typically dot or comma)",
           "type": [
             "string",
             "null"
@@ -35,12 +40,14 @@
           "minLength": 1
         },
         "exclude_field_regex": {
+          "description": "Any field matching the given regex is excluded from comparison",
           "type": [
             "string",
             "null"
           ]
         },
         "field_delimiter": {
+          "description": "The delimiters of the csv fields (typically comma, semicolon or pipe)",
           "type": [
             "string",
             "null"
@@ -49,6 +56,7 @@
           "minLength": 1
         },
         "preprocessing": {
+          "description": "Preprocessing done to the csv files before beginning the comparison",
           "type": [
             "array",
             "null"
@@ -60,12 +68,14 @@
       }
     },
     "HTMLCompareConfig": {
+      "description": "Plain text comparison config, also used for PDF",
       "type": "object",
       "required": [
         "threshold"
       ],
       "properties": {
         "ignore_lines": {
+          "description": "Lines matching any of the given regex will be excluded from comparison",
           "type": [
             "array",
             "null"
@@ -75,19 +85,26 @@
           }
         },
         "threshold": {
+          "description": "Normalized Damerau-Levenshtein distance, 0.0 = bad, 1.0 = identity",
           "type": "number",
           "format": "double"
         }
       }
     },
     "HashConfig": {
+      "description": "Configuration options for the hash comparison module",
       "type": "object",
       "required": [
         "function"
       ],
       "properties": {
         "function": {
-          "$ref": "#/definitions/HashFunction"
+          "description": "Which hash function to use",
+          "allOf": [
+            {
+              "$ref": "#/definitions/HashFunction"
+            }
+          ]
         }
       }
     },
@@ -98,26 +115,24 @@
       ]
     },
     "ImageCompareConfig": {
+      "description": "Image comparison config options",
       "type": "object",
       "required": [
         "threshold"
       ],
       "properties": {
         "threshold": {
+          "description": "Threshold for image comparison < 0.5 is very dissimilar, 1.0 is identical",
           "type": "number",
           "format": "double"
         }
       }
     },
     "Mode": {
+      "description": "comparison mode for csv cells",
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "Ignore"
-          ]
-        },
-        {
+          "description": "`(a-b).abs() < threshold`",
           "type": "object",
           "required": [
             "Absolute"
@@ -125,12 +140,13 @@
           "properties": {
             "Absolute": {
               "type": "number",
-              "format": "float"
+              "format": "double"
             }
           },
           "additionalProperties": false
         },
         {
+          "description": "`((a-b)/a).abs() < threshold`",
           "type": "object",
           "required": [
             "Relative"
@@ -138,22 +154,32 @@
           "properties": {
             "Relative": {
               "type": "number",
-              "format": "float"
+              "format": "double"
             }
           },
           "additionalProperties": false
+        },
+        {
+          "description": "always matches",
+          "type": "string",
+          "enum": [
+            "Ignore"
+          ]
         }
       ]
     },
     "Preprocessor": {
+      "description": "Preprocessor options",
       "oneOf": [
         {
+          "description": "Try to extract the headers from the first row - fallible if first row contains a number",
           "type": "string",
           "enum": [
             "ExtractHeaders"
           ]
         },
         {
+          "description": "Replace all fields in column by number by a deleted marker",
           "type": "object",
           "required": [
             "DeleteColumnByNumber"
@@ -168,6 +194,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Replace all fields in column by name by a deleted marker",
           "type": "object",
           "required": [
             "DeleteColumnByName"
@@ -180,6 +207,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Sort rows by column with given name. Fails if no headers were extracted or column name is not found, or if any row has no numbers there",
           "type": "object",
           "required": [
             "SortByColumnName"
@@ -192,6 +220,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Sort rows by column with given number. Fails if any row has no numbers there or if out of bounds.",
           "type": "object",
           "required": [
             "SortByColumnNumber"
@@ -206,6 +235,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Replace all fields in row with given number by a deleted marker",
           "type": "object",
           "required": [
             "DeleteRowByNumber"
@@ -220,6 +250,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Replace all fields in row  where at least a single field matches regex by a deleted marker",
           "type": "object",
           "required": [
             "DeleteRowByRegex"
@@ -230,10 +261,71 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "description": "replace found cell using row and columnd index by a deleted marker",
+          "type": "object",
+          "required": [
+            "DeleteCellByNumber"
+          ],
+          "properties": {
+            "DeleteCellByNumber": {
+              "type": "object",
+              "required": [
+                "column",
+                "row"
+              ],
+              "properties": {
+                "column": {
+                  "description": "column number",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                },
+                "row": {
+                  "description": "row number",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "replace found cell using column header and row index by a deleted marker",
+          "type": "object",
+          "required": [
+            "DeleteCellByName"
+          ],
+          "properties": {
+            "DeleteCellByName": {
+              "type": "object",
+              "required": [
+                "column",
+                "row"
+              ],
+              "properties": {
+                "column": {
+                  "description": "column with given name",
+                  "type": "string"
+                },
+                "row": {
+                  "description": "row number",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
     "Rule": {
+      "description": "Representing a single comparison rule",
       "type": "object",
       "oneOf": [
         {
@@ -304,20 +396,25 @@
       ],
       "required": [
         "name",
-        "pattern_exclude",
         "pattern_include"
       ],
       "properties": {
         "name": {
+          "description": "The name of the rule - will be displayed in logs",
           "type": "string"
         },
         "pattern_exclude": {
-          "type": "array",
+          "description": "A list of glob-patterns to exclude - optional",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
           }
         },
         "pattern_include": {
+          "description": "A list of glob-patterns to include",
           "type": "array",
           "items": {
             "type": "string"

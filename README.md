@@ -105,6 +105,14 @@ rules:
         - DeleteRowByNumber: 0
         # Deletes rows having any element matching the given regex (may delete different lines in nom / act!
         - DeleteRowByRegex: "Vertex_Count"
+        # Deletes the cell (column, row) by setting the value to 'DELETED'
+        - DeleteCellByNumber:
+            column: 0
+            row: 0
+        # Deletes the cell (column name, row) by setting the value to 'DELETED'. This needs `ExtractHeaders`
+        - DeleteCellByName:
+            column: "Column to delete"
+            row: 0
 ```
 
 #### Image comparison
@@ -180,6 +188,9 @@ Currently we only support SHA-256 but more checks can be added easily.
 
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal
+- Add deletion by cell
+- Simplify report sub-folders creation: sub-folders are now created temporarily in the temp folder instead of in the current working folder
+- Change report row numbering to always start with 0, so row deletion is more understandable
 - fix floating point value comparison of non-displayable diff values
 
 ### 0.2.3

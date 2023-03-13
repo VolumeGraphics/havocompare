@@ -23,13 +23,23 @@ pub enum Error {
     TeraIssue(#[from] tera::Error),
     #[error("Problem processing file name {0}")]
     FileNameParsing(String),
+    #[error("IO error {0}")]
+    IOIssue(#[from] std::io::Error),
+    #[error("fs_extra crate error {0}")]
+    FsExtraFailed(#[from] fs_extra::error::Error),
 }
 
 #[derive(Serialize, Debug)]
 pub struct FileCompareResult {
     pub compared_file_name: String,
     pub is_error: bool,
-    pub detail_path: Option<PathBuf>,
+    pub detail_path: Option<DetailPath>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct DetailPath {
+    pub temp_path: PathBuf,
+    pub path_name: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -52,37 +62,33 @@ pub struct CSVReportRow {
     pub has_error: bool,
 }
 
-pub fn create_sub_folder(
-    rule_name: &str,
-    nominal: impl AsRef<Path>,
-    actual: impl AsRef<Path>,
-) -> Result<PathBuf, Error> {
-    let mut joined_file_names = nominal.as_ref().to_string_lossy().to_string();
+pub fn create_sub_folder() -> Result<DetailPath, Error> {
+    let temp_path = tempfile::Builder::new()
+        .prefix("havocompare-")
+        .tempdir()?
+        .into_path();
 
-    joined_file_names.push_str(actual.as_ref().to_string_lossy().to_string().as_str());
-    joined_file_names.push_str(rule_name);
+    let path_name = temp_path
+        .file_name()
+        .ok_or_else(|| {
+            Error::FileNameParsing(format!(
+                "Could not extract filename from {}",
+                temp_path.to_string_lossy()
+            ))
+        })?
+        .to_string_lossy()
+        .to_string();
 
-    debug!("Joined name: {}", &joined_file_names);
-
-    let key = format!("havoc-{:x}", md5::compute(joined_file_names.as_bytes()));
-
-    let sub_folder = PathBuf::from(&key);
-
-    if sub_folder.is_dir() {
-        fat_io_wrap_std(&sub_folder, &fs::remove_dir_all)?;
-    }
-
-    debug!("create sub folder {}", &key);
-    fat_io_wrap_std(&key, &fs::create_dir)?;
-
-    Ok(sub_folder)
+    Ok(DetailPath {
+        temp_path,
+        path_name,
+    })
 }
 
 pub fn write_html_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[String],
-    rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
     let mut result = FileCompareResult {
         compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
@@ -96,9 +102,9 @@ pub fn write_html_detail(
         return Ok(result);
     }
 
-    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref())?;
+    let sub_folder = create_sub_folder()?;
 
-    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -130,7 +136,6 @@ pub(crate) fn write_csv_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[DiffType],
-    rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
     let mut result = FileCompareResult {
         compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
@@ -230,9 +235,9 @@ pub(crate) fn write_csv_detail(
         })
         .collect();
 
-    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref())?;
+    let sub_folder = create_sub_folder()?;
 
-    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -240,14 +245,11 @@ pub(crate) fn write_csv_detail(
         template::PLAIN_CSV_DETAIL_TEMPLATE,
     )?;
 
-    let row_index_increment: usize = usize::from(!headers.columns.is_empty());
-
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
     ctx.insert("rows", &rows);
     ctx.insert("headers", &headers);
-    ctx.insert("row_index_increment", &row_index_increment);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
     debug!("detail html {:?} created", &detail_file);
@@ -264,7 +266,6 @@ pub fn write_image_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[String],
-    rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
     let mut result = FileCompareResult {
         compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
@@ -278,9 +279,9 @@ pub fn write_image_detail(
         return Ok(result);
     }
 
-    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref())?;
+    let sub_folder = create_sub_folder()?;
 
-    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -306,13 +307,13 @@ pub fn write_image_detail(
     let actual_image = format!("actual_image_{}", get_file_name(actual.as_ref())?);
     let nominal_image = format!("nominal_image_.{}", get_file_name(nominal.as_ref())?);
 
-    fs::copy(actual.as_ref(), sub_folder.join(&actual_image))
+    fs::copy(actual.as_ref(), sub_folder.temp_path.join(&actual_image))
         .map_err(|e| FatIOError::from_std_io_err(e, actual.as_ref().to_path_buf()))?;
-    fs::copy(nominal.as_ref(), sub_folder.join(&nominal_image))
+    fs::copy(nominal.as_ref(), sub_folder.temp_path.join(&nominal_image))
         .map_err(|e| FatIOError::from_std_io_err(e, nominal.as_ref().to_path_buf()))?;
 
     let diff_image = &diffs[1];
-    let img_target = sub_folder.join(diff_image);
+    let img_target = sub_folder.temp_path.join(diff_image);
     fs::copy(diff_image, &img_target)
         .map_err(|e| FatIOError::from_std_io_err(e, img_target.to_path_buf()))?;
 
@@ -338,7 +339,6 @@ pub fn write_pdf_detail(
     nominal_string: &String,
     actual_string: &String,
     diffs: &[(usize, String)],
-    rule_name: &str,
 ) -> Result<FileCompareResult, Error> {
     let mut result = FileCompareResult {
         compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
@@ -348,21 +348,21 @@ pub fn write_pdf_detail(
         detail_path: None,
     };
 
-    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref())?;
+    let sub_folder = create_sub_folder()?;
 
     let nominal_extracted_filename = "nominal_extracted_text.txt";
     let actual_extracted_filename = "actual_extracted_text.txt";
 
-    let nominal_extracted_file = sub_folder.join(nominal_extracted_filename);
+    let nominal_extracted_file = sub_folder.temp_path.join(nominal_extracted_filename);
     fs::write(&nominal_extracted_file, nominal_string.as_bytes())
         .map_err(|e| FatIOError::from_std_io_err(e, nominal_extracted_file))?;
 
-    let actual_extracted_file = sub_folder.join(actual_extracted_filename);
+    let actual_extracted_file = sub_folder.temp_path.join(actual_extracted_filename);
     fs::write(&actual_extracted_file, actual_string.as_bytes())
         .map_err(|e| FatIOError::from_std_io_err(e, actual_extracted_file))?;
     info!("Extracted text written to files");
 
-    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -414,10 +414,9 @@ fn create_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     error: Box<dyn std::error::Error>,
-    rule_name: &str,
-) -> Result<PathBuf, Error> {
-    let sub_folder = create_sub_folder(rule_name, nominal.as_ref(), actual.as_ref())?;
-    let detail_file = sub_folder.join(template::DETAIL_FILENAME);
+) -> Result<DetailPath, Error> {
+    let sub_folder = create_sub_folder()?;
+    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -441,7 +440,6 @@ pub fn write_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     error: Box<dyn std::error::Error>,
-    rule_name: &str,
 ) -> FileCompareResult {
     let mut result = FileCompareResult {
         compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
@@ -451,7 +449,7 @@ pub fn write_error_detail(
         detail_path: None,
     };
 
-    if let Ok(sub_folder) = create_error_detail(nominal, actual, error, rule_name) {
+    if let Ok(sub_folder) = create_error_detail(nominal, actual, error) {
         result.detail_path = Some(sub_folder);
     } else {
         error!("Could not create error detail");
@@ -481,27 +479,14 @@ pub(crate) fn create(
         debug!("Create subfolder {:?}", &sub_folder);
         fat_io_wrap_std(&sub_folder, &fs::create_dir)?;
         for file_result in rule_result.compare_results.iter() {
-            if let Some(detail) = &file_result.detail_path {
-                let target = &sub_folder.join(detail);
-                debug!("moving subfolder {:?} to {:?}", &detail, &target);
+            if let Some(detail_path) = &file_result.detail_path {
+                debug!(
+                    "moving subfolder {:?} to {:?}",
+                    &detail_path.temp_path, &sub_folder
+                );
 
-                let files = crate::glob_files(detail, &["*"])?;
-                for file in files.iter() {
-                    if let Some(file_name) = file.file_name() {
-                        if !target.exists() || !target.is_dir() {
-                            debug!(
-                                "creating target subfolder {} in the report dir ",
-                                target.to_string_lossy()
-                            );
-                            fat_io_wrap_std(&target, &fs::create_dir)?;
-                        }
-                        debug!("copying file to target {}", file.to_string_lossy());
-                        fs::copy(file, target.join(file_name))
-                            .map_err(|e| FatIOError::from_std_io_err(e, file.clone()))?;
-                    }
-                }
-                debug!("removing temporary subfolder {}", detail.to_string_lossy());
-                fat_io_wrap_std(detail, &fs::remove_dir_all)?;
+                let options = fs_extra::dir::CopyOptions::new();
+                fs_extra::dir::copy(&detail_path.temp_path, &sub_folder, &options)?;
             }
         }
     }
@@ -595,5 +580,12 @@ mod tests {
             "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
         );
         assert_eq!(PathBuf::from("Volume1.csv"), result);
+    }
+
+    #[test]
+    fn test_create_sub_folder() {
+        let sub_folder = create_sub_folder().unwrap();
+        assert!(sub_folder.temp_path.is_dir());
+        assert!(!sub_folder.path_name.is_empty());
     }
 }
