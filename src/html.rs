@@ -69,9 +69,8 @@ pub fn compare_files<P: AsRef<Path>>(
     actual
         .lines()
         .enumerate()
-        .into_iter()
         .filter_map(|l| l.1.ok().map(|a| (l.0, a)))
-        .zip(nominal.lines().into_iter().filter_map(|l| l.ok()))
+        .zip(nominal.lines().filter_map(|l| l.ok()))
         .filter(|((_, a), n)|
             exclusion_list.iter().all(|exc| !exc.is_match(a)) && exclusion_list.iter().all(|exc| !exc.is_match(n))
         )
@@ -80,7 +79,7 @@ pub fn compare_files<P: AsRef<Path>>(
             if  distance < config.threshold {
 
                 let error =  format!(
-                    "Missmatch in HTML-file in line {}. Expected: '{}' found '{}' (diff: {}, threshold: {})",
+                    "Mismatch in HTML-file in line {}. Expected: '{}' found '{}' (diff: {}, threshold: {})",
                     l, n, a, distance, config.threshold
                 );
 
