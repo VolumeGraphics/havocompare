@@ -183,10 +183,28 @@ Currently, we only support SHA-256 but more checks can be added easily.
       function: Sha256
 ```
 
+#### File metadata comparison
+For the cases where the pure existence of a file is already enough
+
+```yaml
+  - name: "Hash comparison strict"
+    pattern_exclude: 
+      - "**/*.bin"
+    FileProperties:
+      # file path must not contain whitespace
+      forbid_name_regex: "[\\s]"
+      # files must have their modification timestamp within 10 seconds
+      modification_date_tolerance_secs: 10
+      # files sizes must be within 1 kb 
+      file_size_tolerance_bytes: 1024
+```
+
+
 ## Changelog
 
 ### 0.3.0
 - Allow RGBA image comparison
+- Add file metadata comparison
 
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal

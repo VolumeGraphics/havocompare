@@ -324,6 +324,37 @@
         }
       ]
     },
+    "PropertiesConfig": {
+      "description": "the configuration struct for file property comparison",
+      "type": "object",
+      "properties": {
+        "file_size_tolerance_bytes": {
+          "description": "Compare the file size, difference must be smaller then given value",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "forbid_name_regex": {
+          "description": "Fail if the name contains that regex",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modification_date_tolerance_secs": {
+          "description": "Compare the modification date, difference must be smaller then the given value",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "Rule": {
       "description": "Representing a single comparison rule",
       "type": "object",
@@ -389,6 +420,19 @@
           "properties": {
             "PDFText": {
               "$ref": "#/definitions/HTMLCompareConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Compare file-properties",
+          "type": "object",
+          "required": [
+            "FileProperties"
+          ],
+          "properties": {
+            "FileProperties": {
+              "$ref": "#/definitions/PropertiesConfig"
             }
           },
           "additionalProperties": false

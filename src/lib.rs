@@ -20,9 +20,11 @@ mod html;
 mod image;
 pub use crate::image::ImageCompareConfig;
 mod pdf;
+mod properties;
 mod report;
 
 pub use crate::html::HTMLCompareConfig;
+use crate::properties::PropertiesConfig;
 use crate::report::FileCompareResult;
 use schemars::schema_for;
 use schemars_derive::JsonSchema;
@@ -86,6 +88,8 @@ pub enum ComparisonMode {
     Hash(HashConfig),
     /// PDF text compare
     PDFText(HTMLCompareConfig),
+    /// Compare file-properties
+    FileProperties(PropertiesConfig),
 }
 
 fn get_file_name(path: &Path) -> Option<Cow<str>> {
@@ -164,7 +168,7 @@ fn process_file(
 
     info!("File: {file_name_nominal} | {file_name_actual}");
 
-    let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> =
+    let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> = {
         match &rule.file_type {
             ComparisonMode::CSV(conf) => {
                 csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
@@ -181,7 +185,12 @@ fn process_file(
             ComparisonMode::PDFText(conf) => {
                 pdf::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
-        };
+            ComparisonMode::FileProperties(conf) => {
+                properties::compare_files(nominal.as_ref(), actual.as_ref(), conf)
+                    .map_err(|e| e.into())
+            }
+        }
+    };
 
     match compare_result {
         Ok(result) => {

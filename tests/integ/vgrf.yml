@@ -24,3 +24,12 @@ rules:
         - "next_ignore"
         - "[A-Z]*[0-9]"
 
+  - name: "All files are lowercase, no spaces"
+    pattern_include:
+      - "**/*.*"
+    pattern_exclude: null
+    FileProperties:
+      forbid_name_regex: "[\\s]"
+      modification_date_tolerance_secs: 0
+      file_size_tolerance_bytes: 0
+
