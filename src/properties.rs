@@ -125,8 +125,6 @@ pub fn compare_files<P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing::Level;
-    use tracing_subscriber::FmtSubscriber;
 
     #[test]
     fn name_regex_works() {
@@ -159,11 +157,6 @@ mod tests {
     }
     #[test]
     fn modification_timestamps() {
-        let subscriber = FmtSubscriber::builder()
-            .with_max_level(Level::INFO)
-            .finish();
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("setting default subscriber failed");
         let toml_file = "Cargo.toml";
         let lock_file = "Cargo.lock";
         assert!(!file_modification_time_out_of_tolerance(
