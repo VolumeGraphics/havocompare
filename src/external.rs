@@ -35,7 +35,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
             String::from_utf8_lossy(&output.stderr)
         );
         if !output.status.success() {
-            error!("External checker failed for file {}", &compared_file_name);
+            error!("External checker denied file {}", &compared_file_name);
             is_error = true;
         }
     } else {
@@ -50,4 +50,43 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         is_error,
         detail_path: None,
     })
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_log::test;
+
+    #[test]
+    fn test_non_existent_exe() {
+        let result = compare_files(
+            Path::new("file1"),
+            Path::new("file2"),
+            &ExternalConfig {
+                extra_params: Vec::new(),
+                executable: "non_existent".to_owned(),
+            },
+        )
+        .unwrap();
+        assert!(result.is_error);
+    }
+
+    #[test]
+    fn test_bad_output() {
+        let result = compare_files(
+            Path::new("file1"),
+            Path::new("file2"),
+            &ExternalConfig {
+                extra_params: vec![
+                    "run".to_owned(),
+                    "--bin".to_owned(),
+                    "print_args".to_owned(),
+                    "--".to_owned(),
+                    "--exit-with-error".to_owned(),
+                ],
+                executable: "cargo".to_owned(),
+            },
+        )
+        .unwrap();
+        assert!(result.is_error);
+    }
 }

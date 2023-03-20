@@ -12,7 +12,13 @@ fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     info!("!Print-Args!");
+    let mut terminate_code = 0;
     for arg in std::env::args() {
-        info!("Argument: {arg}");
+        info!("Argument: {}", &arg);
+        if arg.as_str() == "--exit-with-error" {
+            eprintln!("E: setting error code to -1");
+            terminate_code = -1;
+        }
     }
+    std::process::exit(terminate_code);
 }
