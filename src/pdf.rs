@@ -38,8 +38,7 @@ pub fn compare_files<P: AsRef<Path>>(
     actual
         .lines()
         .enumerate()
-        .into_iter()
-        .zip(nominal.lines().into_iter())
+        .zip(nominal.lines())
         .filter(|((_, a), n)|
             exclusion_list.iter().all(|exc| !exc.is_match(a)) && exclusion_list.iter().all(|exc| !exc.is_match(n))
         )

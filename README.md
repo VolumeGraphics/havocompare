@@ -3,7 +3,7 @@
 [![Documentation](https://docs.rs/havocompare/badge.svg)](https://docs.rs/havocompare)
 ![CI](https://github.com/VolumeGraphics/havocompare/actions/workflows/rust.yml/badge.svg?branch=main "CI")
 [![Coverage Status](https://coveralls.io/repos/github/VolumeGraphics/havocompare/badge.svg?branch=main)](https://coveralls.io/github/VolumeGraphics/havocompare?branch=main)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE-MIT)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
 ## Quickstart
 
@@ -15,7 +15,7 @@ You just want a binary:
 Check our binary downloads on github-pages
 
 ### 1. Create a config file
-Havocompare was developed with a few design goals in mind. We wanted a human readable and easily composable configuration file format.
+Havocompare was developed with a few design goals in mind. We wanted a human-readable and easily composable configuration file format.
 After a few tries we ended up with the current format, which is a list of rules inside a yaml file. 
 See the following example `config.yaml`:
 ```yaml
@@ -52,8 +52,8 @@ havocompare into a CI system rather easy.
 
 ## Details on the config
 ### Validation Scheme
-Writing a valid configuration file can be error prone without auto completion. We suggest using json schema to validate your yaml
-and even enable auto completion in IDEs like pycharm. To generate the schema you can call:
+Writing a valid configuration file can be error-prone without auto-completion. We suggest using json schema to validate your yaml
+and even enable auto-completion in IDEs like pycharm. To generate the schema you can call:
 `./havocompare schema > config_scheme.json` and import the resulting scheme into your IDE.
 
 ### Comparison options
@@ -65,7 +65,7 @@ Note: If delimiters are not specified, even different delimiters between nominal
 To ignore specific cells, you can specify an exclusion regex.
 
 The preprocessing steps are done after the file is parsed using the given delimiters (or guessing) but before anything else. Processing order is as written in the list.
-In the below example, headers will be extracted from the csv-input file, then a column with the title "Columnn to delete" will be deleted.
+In the below example, headers will be extracted from the csv-input file, then a column with the title "Column to delete" will be deleted.
 If any of the preprocessing steps fail, havocompare will exit with an error immediately so use them carefully.
 
 See the following example with all optional parameters set:
@@ -97,13 +97,13 @@ rules:
         # Sort the table by column 0, beware that the column must only contain numbers / quantities
         - SortByColumnNumber: 0
         # Delete a column by name, needs `ExtractHeaders` first - delete sets all values to 'DELETED'
-        - DeleteColumnByName: "Column to delete"
+        - DeleteColumnByName: "Vertex_Position_Y"
         - DeleteColumnByNumber: 1
         # Sorts are stable, so a second sort will keep the first sort as sub-order.
-        - SortByColumnName: "Sort by column name blabla"
+        - SortByColumnName: "Vertex_Position_X"
         # Deletes the first row by setting all values to 'DELETED' - meaning that numbering stays constant 
         - DeleteRowByNumber: 0
-        # Deletes rows having any element matching the given regex (may delete different lines in nom / act!
+        # Deletes rows having any element matching the given regex (may delete different lines in nom / act)!
         - DeleteRowByRegex: "Vertex_Count"
         # Deletes the cell (column, row) by setting the value to 'DELETED'
         - DeleteCellByNumber:
@@ -135,6 +135,7 @@ For plain text comparison the file is read and compared line by line. For each l
 crate is used. You can ignore single lines which you know are different by specifying an arbitrary number of ignored lines:
 
 ```yaml
+rules:
   - name: "HTML-Compare strict"
     pattern_exclude: 
       - "**/*_changed.html"
@@ -154,6 +155,7 @@ crate is used. You can ignore single lines which you know are different by speci
 For PDF text comparison the text will be extracted and written to temporary files. The files will then be compared using the Plain text comparison:
 
 ```yaml
+rules:
   - name: "PDF-Text-Compare"
     pattern_exclude: 
       - "**/*_changed.pdf"
@@ -172,9 +174,10 @@ For PDF text comparison the text will be extracted and written to temporary file
 
 #### Hash comparison
 For binary files which cannot otherwise be checked we can also do a simple hash comparison.
-Currently we only support SHA-256 but more checks can be added easily.
+Currently, we only support SHA-256 but more checks can be added easily.
 
 ```yaml
+rules:
   - name: "Hash comparison strict"
     pattern_exclude: 
       - "**/*.bin"
@@ -183,8 +186,47 @@ Currently we only support SHA-256 but more checks can be added easily.
       function: Sha256
 ```
 
+#### File metadata comparison
+For the cases where the pure existence or some metadata are already enough.
+
+```yaml
+rules:
+  - name: "Metadata comparison"
+    pattern_exclude: 
+      - "**/*.bin"
+    FileProperties:
+      # nom/act file paths must not contain whitespace
+      forbid_name_regex: "[\\s]"
+      # files must have their modification timestamp within 3600 seconds
+      modification_date_tolerance_secs: 3600
+      # files sizes must be within 1 kb 
+      file_size_tolerance_bytes: 1024
+```
+
+#### Run external comparison tool
+In case you want to run an external comparison tool, you can use this option
+
+
+```yaml
+rules:
+  - name: "External checker"
+    pattern_include:
+      - "*.pdf"
+    External:
+      # this config will call `/usr/bin/pdf-diff --only-images nominal.pdf actual.pdf`
+      # return code will decide on comparison result
+      executable: "/usr/bin/pdf-diff"
+      # optional: add as many extra params as 
+      extra_params:
+        - "--only-images"
+```
 
 ## Changelog
+
+### 0.3.0
+- Allow RGBA image comparison
+- Add file metadata comparison
+- Add external checking
 
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal
@@ -194,7 +236,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 - fix floating point value comparison of non-displayable diff values
 
 ### 0.2.3
-- bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized"
+- bump pdf-extract crate to 0.6.4 to fix "'attempted to leave type `linked_hash_map::Node<alloc::vec::Vec<u8>, object::Object>` uninitialized'"
 
 ### 0.2.2
 - Include files which has error and can't be compared to the report
@@ -214,7 +256,7 @@ Currently we only support SHA-256 but more checks can be added easily.
 - CSVs with non-rectangular format will now fail
 
 ### 0.1.4
-- Add multiple includes and excludes - warning, this will break yamls from 0.1.3 and earlier
+- Add multiple includes and excludes - warning, this will break rules-files from 0.1.3 and earlier
 - Remove all `unwrap` and `expect` in the library code in favor of correct error propagation
 - Add preprocessing options for CSV files
 - Refined readme.md
@@ -231,5 +273,5 @@ Currently we only support SHA-256 but more checks can be added easily.
 ### 0.1.1:
  - Better error message on folder not found
  - Better test coverage
- - Fix colors on windows terminal
- - Extend CI to windows and mac
+ - Fix colors on Windows terminal
+ - Extend CI to Windows and mac

@@ -373,8 +373,7 @@ pub fn write_pdf_detail(
     let combined_lines: Vec<CSVReportColumn> = actual_string
         .lines()
         .enumerate()
-        .into_iter()
-        .zip(nominal_string.lines().into_iter())
+        .zip(nominal_string.lines())
         .map(|((l, a), n)| {
             let mut result = CSVReportColumn {
                 nominal_value: n.replace(' ', "&nbsp;"),

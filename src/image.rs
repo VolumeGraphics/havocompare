@@ -1,5 +1,4 @@
 use crate::{get_file_name, report};
-use image_compare::ToColorMap;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -44,21 +43,24 @@ pub fn compare_paths<P: AsRef<Path>>(
     config: &ImageCompareConfig,
 ) -> Result<report::FileCompareResult, Error> {
     let mut diffs: Vec<String> = Vec::new();
-    let nominal = image::open(nominal_path.as_ref())?.into_rgb8();
-    let actual = image::open(actual_path.as_ref())?.into_rgb8();
+    let nominal = image::open(nominal_path.as_ref())?.into_rgba8();
+    let actual = image::open(actual_path.as_ref())?.into_rgba8();
 
-    let result = image_compare::rgb_hybrid_compare(&nominal, &actual)?;
+    let result = image_compare::rgba_hybrid_compare(&nominal, &actual)?;
+    let nominal_file_name =
+        get_file_name(nominal_path.as_ref()).ok_or(Error::FileNameParsing(format!(
+            "Could not extract filename from path {:?}",
+            nominal_path.as_ref()
+        )))?;
+    let out_path = (nominal_file_name + "diff_image.png").to_string();
+
     if result.score < config.threshold {
-        let color_map = result.image.to_color_map();
-        let nominal_file_name =
-            get_file_name(nominal_path.as_ref()).ok_or(Error::FileNameParsing(format!(
-                "Could not extract filename from path {:?}",
-                nominal_path.as_ref()
-            )))?;
-        let out_path = (nominal_file_name + "diff_image.png").to_string();
-        info!("Writing diff image to: {}", out_path.as_str());
-        color_map.save(PathBuf::from(&out_path))?;
-
+        if let Some(color_map) = result.image.as_ref().map(|i| i.to_color_map()) {
+            info!("Writing diff image to: {}", out_path.as_str());
+            color_map.save(PathBuf::from(&out_path))?;
+        } else {
+            error!("Algorithm did not produce compare-image, so we cannot save it.");
+        }
         let error_message = format!(
             "Diff for image {} was not met, expected {}, found {}",
             nominal_path.as_ref().to_string_lossy(),
