@@ -21,6 +21,76 @@ pub struct PropertiesConfig {
     forbid_name_regex: Option<String>,
 }
 
+fn regex_matches_any_path(
+    nominal_path: &str,
+    actual_path: &str,
+    regex: &str,
+) -> Result<bool, Error> {
+    let regex = Regex::new(regex)?;
+    if regex.is_match(nominal_path) || regex.is_match(actual_path) {
+        error!("One of the files ({nominal_path}, {actual_path}) matched the regex {regex}");
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn file_size_out_of_tolerance(nominal: &Path, actual: &Path, tolerance: u64) -> bool {
+    let mut is_error = false;
+    if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
+        let size_diff =
+            (nominal_meta.len() as i128 - actual_meta.len() as i128).unsigned_abs() as u64;
+        if size_diff > tolerance {
+            error!("File size tolerance exceeded, diff is {size_diff}, tolerance was {tolerance}");
+            is_error = true;
+        }
+    } else {
+        error!(
+            "Could not get file metadata for either: {} or {}",
+            &nominal.to_string_lossy(),
+            &actual.to_string_lossy()
+        );
+        is_error = true;
+    }
+    is_error
+}
+
+fn file_modification_time_out_of_tolerance(nominal: &Path, actual: &Path, tolerance: u64) -> bool {
+    let mut is_error = false;
+    if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
+        if let (Ok(mod_time_act), Ok(mod_time_nom)) =
+            (nominal_meta.modified(), actual_meta.modified())
+        {
+            let now = SystemTime::now();
+
+            if let (Ok(nom_age), Ok(act_age)) = (
+                now.duration_since(mod_time_nom),
+                now.duration_since(mod_time_act),
+            ) {
+                let time_diff =
+                    (nom_age.as_secs() as i128 - act_age.as_secs() as i128).unsigned_abs() as u64;
+                if time_diff > tolerance {
+                    error!("Modification times too far off difference in timestamps {time_diff} s - tolerance {tolerance} s");
+                    is_error = true;
+                }
+            } else {
+                error!("Could not calculate duration between modification timestamps");
+                is_error = true;
+            }
+        } else {
+            error!("Could not read file modification timestamps");
+            is_error = true;
+        }
+    } else {
+        error!(
+            "Could not get file metadata for either: {} or {}",
+            &nominal.to_string_lossy(),
+            &actual.to_string_lossy()
+        );
+        is_error = true;
+    }
+    is_error
+}
+
 pub fn compare_files<P: AsRef<Path>>(
     nominal: P,
     actual: P,
@@ -33,56 +103,16 @@ pub fn compare_files<P: AsRef<Path>>(
     let actual_file_name_full = nominal.to_string_lossy();
 
     if let Some(name_regex) = config.forbid_name_regex.as_deref() {
-        let regex = Regex::new(name_regex)?;
-        if regex.is_match(&compared_file_name_full) || regex.is_match(&actual_file_name_full) {
-            error!(
-                "One of the files ({}, {}) matched the regex {name_regex}",
-                &compared_file_name_full, &actual_file_name_full
-            );
-            is_error = true;
-        }
+        is_error |=
+            regex_matches_any_path(&compared_file_name_full, &actual_file_name_full, name_regex)?;
     }
 
-    if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
-        if let Some(size_tolerance) = config.file_size_tolerance_bytes {
-            let size_diff =
-                (nominal_meta.len() as i128 - actual_meta.len() as i128).unsigned_abs() as u64;
-            if size_diff > size_tolerance {
-                error!("File size tolerance exceeded, diff is {size_diff}, tolerance was {size_tolerance}");
-                is_error = true;
-            }
-        }
+    if let Some(tolerance) = config.file_size_tolerance_bytes {
+        is_error |= file_size_out_of_tolerance(nominal, actual, tolerance);
+    }
 
-        if let Some(mod_time_tolerance) = config.modification_date_tolerance_secs {
-            if let (Ok(mod_time_act), Ok(mod_time_nom)) =
-                (nominal_meta.modified(), actual_meta.modified())
-            {
-                let now = SystemTime::now();
-
-                if let (Ok(nom_age), Ok(act_age)) = (
-                    now.duration_since(mod_time_nom),
-                    now.duration_since(mod_time_act),
-                ) {
-                    let time_diff = nom_age - act_age;
-                    if time_diff.as_secs() > mod_time_tolerance {
-                        error!("Modification times too far off difference in timestamps {}s - tolerance {mod_time_tolerance}s",time_diff.as_secs());
-                        is_error = true;
-                    }
-                } else {
-                    error!("Could not calculate duration between modification timestamps");
-                    is_error = true;
-                }
-            } else {
-                error!("Could not read file modification timestamps");
-                is_error = true;
-            }
-        }
-    } else {
-        error!(
-            "Could not get file metadata for either: {} or {}",
-            &compared_file_name_full, &actual_file_name_full
-        );
-        is_error = true;
+    if let Some(tolerance) = config.modification_date_tolerance_secs {
+        is_error |= file_modification_time_out_of_tolerance(nominal, actual, tolerance);
     }
 
     Ok(FileCompareResult {
@@ -90,4 +120,61 @@ pub fn compare_files<P: AsRef<Path>>(
         is_error,
         detail_path: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing::Level;
+    use tracing_subscriber::FmtSubscriber;
+
+    #[test]
+    fn name_regex_works() {
+        let file_name_mock = "/dev/urandom";
+        let file_name_cap_mock = "/proc/cpuInfo";
+        let regex_no_capitals = r"[A-Z]";
+        let regex_no_spaces = r"[\s]";
+        assert!(
+            regex_matches_any_path(file_name_mock, file_name_cap_mock, regex_no_capitals).unwrap()
+        );
+        assert!(
+            !regex_matches_any_path(file_name_mock, file_name_cap_mock, regex_no_spaces).unwrap()
+        );
+    }
+
+    #[test]
+    fn file_size() {
+        let toml_file = "Cargo.toml";
+        let lock_file = "Cargo.lock";
+        assert!(!file_size_out_of_tolerance(
+            Path::new(toml_file),
+            Path::new(toml_file),
+            0
+        ));
+        assert!(file_size_out_of_tolerance(
+            Path::new(toml_file),
+            Path::new(lock_file),
+            0
+        ));
+    }
+    #[test]
+    fn modification_timestamps() {
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::INFO)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+        let toml_file = "Cargo.toml";
+        let lock_file = "Cargo.lock";
+        assert!(!file_modification_time_out_of_tolerance(
+            Path::new(toml_file),
+            Path::new(toml_file),
+            0
+        ));
+        assert!(file_modification_time_out_of_tolerance(
+            Path::new(toml_file),
+            Path::new(lock_file),
+            0
+        ));
+    }
 }
