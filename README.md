@@ -184,17 +184,17 @@ Currently, we only support SHA-256 but more checks can be added easily.
 ```
 
 #### File metadata comparison
-For the cases where the pure existence of a file is already enough
+For the cases where the pure existence or some metadata are already enough.
 
 ```yaml
-  - name: "Hash comparison strict"
+  - name: "Metadata comparison"
     pattern_exclude: 
       - "**/*.bin"
     FileProperties:
-      # file path must not contain whitespace
+      # nom/act file paths must not contain whitespace
       forbid_name_regex: "[\\s]"
-      # files must have their modification timestamp within 10 seconds
-      modification_date_tolerance_secs: 10
+      # files must have their modification timestamp within 3600 seconds
+      modification_date_tolerance_secs: 3600
       # files sizes must be within 1 kb 
       file_size_tolerance_bytes: 1024
 ```
