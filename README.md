@@ -135,6 +135,7 @@ For plain text comparison the file is read and compared line by line. For each l
 crate is used. You can ignore single lines which you know are different by specifying an arbitrary number of ignored lines:
 
 ```yaml
+rules:
   - name: "HTML-Compare strict"
     pattern_exclude: 
       - "**/*_changed.html"
@@ -154,6 +155,7 @@ crate is used. You can ignore single lines which you know are different by speci
 For PDF text comparison the text will be extracted and written to temporary files. The files will then be compared using the Plain text comparison:
 
 ```yaml
+rules:
   - name: "PDF-Text-Compare"
     pattern_exclude: 
       - "**/*_changed.pdf"
@@ -175,6 +177,7 @@ For binary files which cannot otherwise be checked we can also do a simple hash 
 Currently, we only support SHA-256 but more checks can be added easily.
 
 ```yaml
+rules:
   - name: "Hash comparison strict"
     pattern_exclude: 
       - "**/*.bin"
@@ -187,6 +190,7 @@ Currently, we only support SHA-256 but more checks can be added easily.
 For the cases where the pure existence or some metadata are already enough.
 
 ```yaml
+rules:
   - name: "Metadata comparison"
     pattern_exclude: 
       - "**/*.bin"
@@ -199,12 +203,30 @@ For the cases where the pure existence or some metadata are already enough.
       file_size_tolerance_bytes: 1024
 ```
 
+#### Run external comparison tool
+In case you want to run an external comparison tool, you can use this option
+
+
+```yaml
+rules:
+  - name: "External checker"
+    pattern_include:
+      - "*.pdf"
+    External:
+      # this config will call `/usr/bin/pdf-diff --only-images nominal.pdf actual.pdf`
+      # return code will decide on comparison result
+      executable: "/usr/bin/pdf-diff"
+      # optional: add as many extra params as 
+      extra_params:
+        - "--only-images"
+```
 
 ## Changelog
 
 ### 0.3.0
 - Allow RGBA image comparison
 - Add file metadata comparison
+- Add external checking
 
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal

@@ -91,7 +91,7 @@ fn file_modification_time_out_of_tolerance(nominal: &Path, actual: &Path, tolera
     is_error
 }
 
-pub fn compare_files<P: AsRef<Path>>(
+pub(crate) fn compare_files<P: AsRef<Path>>(
     nominal: P,
     actual: P,
     config: &PropertiesConfig,

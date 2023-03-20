@@ -19,10 +19,12 @@ pub use hash::HashConfig;
 mod html;
 mod image;
 pub use crate::image::ImageCompareConfig;
+mod external;
 mod pdf;
 mod properties;
 mod report;
 
+use crate::external::ExternalConfig;
 pub use crate::html::HTMLCompareConfig;
 use crate::properties::PropertiesConfig;
 use crate::report::FileCompareResult;
@@ -90,6 +92,9 @@ pub enum ComparisonMode {
     PDFText(HTMLCompareConfig),
     /// Compare file-properties
     FileProperties(PropertiesConfig),
+
+    /// Run external comparison executable
+    External(ExternalConfig),
 }
 
 fn get_file_name(path: &Path) -> Option<Cow<str>> {
@@ -187,6 +192,10 @@ fn process_file(
             }
             ComparisonMode::FileProperties(conf) => {
                 properties::compare_files(nominal.as_ref(), actual.as_ref(), conf)
+                    .map_err(|e| e.into())
+            }
+            ComparisonMode::External(conf) => {
+                external::compare_files(nominal.as_ref(), actual.as_ref(), conf)
                     .map_err(|e| e.into())
             }
         }

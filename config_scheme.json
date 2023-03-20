@@ -67,6 +67,26 @@
         }
       }
     },
+    "ExternalConfig": {
+      "type": "object",
+      "required": [
+        "executable",
+        "extra_params"
+      ],
+      "properties": {
+        "executable": {
+          "description": "The executable to call - will be started like: `#executable #(#extra_params)* #nominal #actual`",
+          "type": "string"
+        },
+        "extra_params": {
+          "description": "Extra parameters to pass",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "HTMLCompareConfig": {
       "description": "Plain text comparison config, also used for PDF",
       "type": "object",
@@ -433,6 +453,19 @@
           "properties": {
             "FileProperties": {
               "$ref": "#/definitions/PropertiesConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Run external comparison executable",
+          "type": "object",
+          "required": [
+            "External"
+          ],
+          "properties": {
+            "External": {
+              "$ref": "#/definitions/ExternalConfig"
             }
           },
           "additionalProperties": false
