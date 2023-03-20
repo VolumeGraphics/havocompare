@@ -27,18 +27,15 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         .output();
     if let Ok(output) = output {
         info!(
-            "External Stdout: {}",
+            "External stdout: {}",
             String::from_utf8_lossy(&output.stdout)
         );
         info!(
-            "External Stderr: {}",
+            "External stderr: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         if !output.status.success() {
-            error!(
-                "External checker didn't return success for file {}",
-                &compared_file_name
-            );
+            error!("External checker failed for file {}", &compared_file_name);
             is_error = true;
         }
     } else {
