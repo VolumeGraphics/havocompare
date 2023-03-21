@@ -19,6 +19,7 @@ path = "src/print_args.rs"
 
 [dependencies]
 clap = {version= "4.1", features=["derive"]}
+chrono = "0.4"
 serde = "1.0"
 serde_yaml = "0.9"
 schemars = "0.8"

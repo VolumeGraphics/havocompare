@@ -10,7 +10,6 @@ pub const INDEX_TEMPLATE: &str = r###"
 
         .error {
             background-color: #fbcccc !important;
-            color:red;
         }
 
         h3 {
@@ -33,6 +32,10 @@ pub const INDEX_TEMPLATE: &str = r###"
 		table.dataTable tbody td {
 			padding:0px 0px !important;
 		}
+		
+		.text-error {
+			color:red;
+		}
 
     </style>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
@@ -41,26 +44,40 @@ pub const INDEX_TEMPLATE: &str = r###"
 
 <div id="accordion">
 {% for rule_report in rule_results %}
-	<h3>{{ rule_report.rule.name }}</h3>
+	<h3>
+		{{ rule_report.rule.name }}
+	</h3>
 	<div class="container">
 	<table class="report cell-border">
 		<thead>
 		<tr>
 			<th>File</th>
+			{% if rule_report.rule.FileProperties %}
+				<th>File Size</th>
+				<th>Creation date</th>
+			{% endif %}
 			<th>Result</th>
 		</tr>
 		</thead>
 		<tbody>
 			{% for file in rule_report.compare_results %}
 				<tr {% if file.is_error %} class="error" {% endif %}>
-					<td>
+					<td {% if rule_report.rule.FileProperties and file.extra_columns.0 and file.extra_columns.0.is_error %} class="text-error" {% endif %}>
 						{% if file.detail_path %}
 							<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.compared_file_name }}</a>
 						{% else %}
 							{{ file.compared_file_name }}
 						{% endif %}
 					</td>
-					<td>{% if file.is_error %} <span>&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
+					{% if rule_report.rule.FileProperties %}
+						<td {% if file.extra_columns.1.is_error %} class="text-error" {% endif %}>
+							{{ file.extra_columns.1.actual_value }} / {{ file.extra_columns.1.nominal_value }}
+						</td>
+						<td {% if file.extra_columns.2.is_error %} class="text-error" {% endif %}>
+							{{ file.extra_columns.2.actual_value }} / {{ file.extra_columns.2.nominal_value }}
+						</td>
+					{% endif %}
+					<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
 				</tr>
 			{% endfor %}
 		</tbody>

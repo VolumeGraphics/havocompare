@@ -49,6 +49,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         compared_file_name,
         is_error,
         detail_path: None,
+        extra_columns: vec![],
     })
 }
 #[cfg(test)]

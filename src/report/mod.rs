@@ -34,6 +34,15 @@ pub struct FileCompareResult {
     pub compared_file_name: String,
     pub is_error: bool,
     pub detail_path: Option<DetailPath>,
+    pub extra_columns: Vec<PropertyCompareResult>,
+}
+
+#[derive(Serialize, Debug, Default)]
+pub struct PropertyCompareResult {
+    pub nominal_value: String,
+    pub actual_value: String,
+    pub is_error: bool,
+    pub diff_value: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -96,6 +105,7 @@ pub fn write_html_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
+        extra_columns: vec![],
     };
 
     if diffs.is_empty() {
@@ -143,6 +153,7 @@ pub(crate) fn write_csv_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
+        extra_columns: vec![],
     };
 
     let mut headers: CSVReportRow = CSVReportRow {
@@ -273,6 +284,7 @@ pub fn write_image_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
+        extra_columns: vec![],
     };
 
     if diffs.is_empty() {
@@ -346,6 +358,7 @@ pub fn write_pdf_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
+        extra_columns: vec![],
     };
 
     let sub_folder = create_sub_folder()?;
@@ -446,6 +459,7 @@ pub fn write_error_detail(
             .to_string(),
         is_error: true,
         detail_path: None,
+        extra_columns: vec![],
     };
 
     if let Ok(sub_folder) = create_error_detail(nominal, actual, error) {
@@ -516,7 +530,10 @@ pub(crate) fn write_index(
 
 ///Find the relative path between two files
 /// compare both files n reversed order (from bottom to top), and returns only the part which are the same on both files
-fn get_relative_path(actual_path: impl AsRef<Path>, nominal_path: impl AsRef<Path>) -> PathBuf {
+pub(crate) fn get_relative_path(
+    actual_path: impl AsRef<Path>,
+    nominal_path: impl AsRef<Path>,
+) -> PathBuf {
     let actual_iter = actual_path.as_ref().iter().rev();
     let nominal_iter = nominal_path.as_ref().iter().rev();
     let zipped_path = zip(nominal_iter, actual_iter);
