@@ -34,11 +34,11 @@ pub struct FileCompareResult {
     pub compared_file_name: String,
     pub is_error: bool,
     pub detail_path: Option<DetailPath>,
-    pub extra_columns: Vec<PropertyCompareResult>,
+    pub additional_columns: Vec<AdditionalOverviewColumn>,
 }
 
 #[derive(Serialize, Debug, Default)]
-pub struct PropertyCompareResult {
+pub struct AdditionalOverviewColumn {
     pub nominal_value: String,
     pub actual_value: String,
     pub is_error: bool,
@@ -105,7 +105,7 @@ pub fn write_html_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
-        extra_columns: vec![],
+        additional_columns: vec![],
     };
 
     if diffs.is_empty() {
@@ -153,7 +153,7 @@ pub(crate) fn write_csv_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
-        extra_columns: vec![],
+        additional_columns: vec![],
     };
 
     let mut headers: CSVReportRow = CSVReportRow {
@@ -284,7 +284,7 @@ pub fn write_image_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
-        extra_columns: vec![],
+        additional_columns: vec![],
     };
 
     if diffs.is_empty() {
@@ -358,7 +358,7 @@ pub fn write_pdf_detail(
             .to_string(),
         is_error: false,
         detail_path: None,
-        extra_columns: vec![],
+        additional_columns: vec![],
     };
 
     let sub_folder = create_sub_folder()?;
@@ -459,7 +459,7 @@ pub fn write_error_detail(
             .to_string(),
         is_error: true,
         detail_path: None,
-        extra_columns: vec![],
+        additional_columns: vec![],
     };
 
     if let Ok(sub_folder) = create_error_detail(nominal, actual, error) {

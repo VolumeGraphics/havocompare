@@ -227,6 +227,7 @@ rules:
 - Allow RGBA image comparison
 - Add file metadata comparison
 - Add external checking
+- Adjust report for file metadata comparison
 
 ### 0.2.4
 - add check for row lines of both compared csv files, and throw error if they are unequal

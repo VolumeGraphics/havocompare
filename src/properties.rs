@@ -1,4 +1,4 @@
-use crate::report::{get_relative_path, FileCompareResult, PropertyCompareResult};
+use crate::report::{get_relative_path, AdditionalOverviewColumn, FileCompareResult};
 use crate::Error;
 use chrono::offset::Utc;
 use chrono::DateTime;
@@ -27,8 +27,8 @@ fn regex_matches_any_path(
     nominal_path: &str,
     actual_path: &str,
     regex: &str,
-) -> Result<PropertyCompareResult, Error> {
-    let mut result: PropertyCompareResult = Default::default();
+) -> Result<AdditionalOverviewColumn, Error> {
+    let mut result: AdditionalOverviewColumn = Default::default();
     let regex = Regex::new(regex)?;
     if regex.is_match(nominal_path) || regex.is_match(actual_path) {
         error!("One of the files ({nominal_path}, {actual_path}) matched the regex {regex}");
@@ -42,8 +42,8 @@ fn file_size_out_of_tolerance(
     nominal: &Path,
     actual: &Path,
     tolerance: u64,
-) -> PropertyCompareResult {
-    let mut result: PropertyCompareResult = Default::default();
+) -> AdditionalOverviewColumn {
+    let mut result: AdditionalOverviewColumn = Default::default();
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
         let size_diff =
             (nominal_meta.len() as i128 - actual_meta.len() as i128).unsigned_abs() as u64;
@@ -70,8 +70,8 @@ fn file_modification_time_out_of_tolerance(
     nominal: &Path,
     actual: &Path,
     tolerance: u64,
-) -> PropertyCompareResult {
-    let mut result: PropertyCompareResult = Default::default();
+) -> AdditionalOverviewColumn {
+    let mut result: AdditionalOverviewColumn = Default::default();
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
         if let (Ok(mod_time_act), Ok(mod_time_nom)) =
             (nominal_meta.modified(), actual_meta.modified())
@@ -128,39 +128,40 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         .to_string_lossy()
         .to_string();
 
-    let mut extra_columns: Vec<PropertyCompareResult> = Vec::new();
+    let mut additional_columns: Vec<AdditionalOverviewColumn> = Vec::new();
 
-    let result: PropertyCompareResult =
+    let result: AdditionalOverviewColumn =
         if let Some(name_regex) = config.forbid_name_regex.as_deref() {
             regex_matches_any_path(&compared_file_name_full, &actual_file_name_full, name_regex)?
         } else {
             Default::default()
         };
     is_error |= result.is_error;
-    extra_columns.push(result);
+    additional_columns.push(result);
 
-    let result: PropertyCompareResult = if let Some(tolerance) = config.file_size_tolerance_bytes {
+    let result: AdditionalOverviewColumn = if let Some(tolerance) = config.file_size_tolerance_bytes
+    {
         file_size_out_of_tolerance(nominal, actual, tolerance)
     } else {
         Default::default()
     };
     is_error |= result.is_error;
-    extra_columns.push(result);
+    additional_columns.push(result);
 
-    let result: PropertyCompareResult =
+    let result: AdditionalOverviewColumn =
         if let Some(tolerance) = config.modification_date_tolerance_secs {
             file_modification_time_out_of_tolerance(nominal, actual, tolerance)
         } else {
             Default::default()
         };
     is_error |= result.is_error;
-    extra_columns.push(result);
+    additional_columns.push(result);
 
     Ok(FileCompareResult {
         compared_file_name,
         is_error,
         detail_path: None,
-        extra_columns,
+        additional_columns,
     })
 }
 
