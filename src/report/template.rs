@@ -50,34 +50,58 @@ pub const INDEX_TEMPLATE: &str = r###"
 	<div class="container">
 	<table class="report cell-border">
 		<thead>
-		<tr>
-			<th>File</th>
-			{% if rule_report.rule.FileProperties %}
-				<th>File Size</th>
-				<th>Creation date</th>
-			{% endif %}
-			<th>Result</th>
-		</tr>
+		{% if rule_report.rule.FileProperties %}
+			<tr>
+				<th>File</th>
+				<th colspan="2">File Size</th>
+				<th colspan="2">Creation date</th>
+				<th>Result</th>
+			</tr>
+			<tr>
+				<th></th>
+				<th>Nominal</th>
+				<th>Actual</th>
+				<th>Nominal</th>
+				<th>Actual</th>
+				<th></th>
+			</tr>
+		{% else %}
+			<tr>
+				<th>File</th>
+				<th>Result</th>
+			</tr>
+		{% endif %}
 		</thead>
 		<tbody>
 			{% for file in rule_report.compare_results %}
 				<tr {% if file.is_error %} class="error" {% endif %}>
-					<td {% if rule_report.rule.FileProperties and file.additional_columns.0 and file.additional_columns.0.is_error %} class="text-error" {% endif %}>
-						{% if file.detail_path %}
-							<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.compared_file_name }}</a>
-						{% else %}
-							{{ file.compared_file_name }}
-						{% endif %}
-					</td>
 					{% if rule_report.rule.FileProperties %}
+						<td {% if file.additional_columns.0.is_error %} class="text-error" {% endif %}>
+							{{ file.compared_file_name }}
+						</td>
 						<td {% if file.additional_columns.1.is_error %} class="text-error" {% endif %}>
-							{{ file.additional_columns.1.actual_value }} / {{ file.additional_columns.1.nominal_value }}
+							{{ file.additional_columns.1.nominal_value }}
+						</td>
+						<td {% if file.additional_columns.1.is_error %} class="text-error" {% endif %}>
+							{{ file.additional_columns.1.actual_value }}
 						</td>
 						<td {% if file.additional_columns.2.is_error %} class="text-error" {% endif %}>
-							{{ file.additional_columns.2.actual_value }} / {{ file.additional_columns.2.nominal_value }}
+							{{ file.additional_columns.2.nominal_value }}
 						</td>
+						<td {% if file.additional_columns.2.is_error %} class="text-error" {% endif %}>
+							{{ file.additional_columns.2.actual_value }}
+						</td>
+						<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
+					{% else %}
+							<td>
+								{% if file.detail_path %}
+									<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.compared_file_name }}</a>
+								{% else %}
+									{{ file.compared_file_name }}
+								{% endif %}
+							</td>
+							<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
 					{% endif %}
-					<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
 				</tr>
 			{% endfor %}
 		</tbody>
