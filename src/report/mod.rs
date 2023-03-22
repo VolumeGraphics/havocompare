@@ -422,6 +422,49 @@ pub fn write_pdf_detail(
     Ok(result)
 }
 
+pub fn write_external_detail(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    is_error: bool,
+    stdout: &str,
+    stderr: &str,
+    message: &str,
+) -> Result<FileCompareResult, Error> {
+    let mut result = FileCompareResult {
+        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
+            .to_string_lossy()
+            .to_string(),
+        is_error,
+        detail_path: None,
+        additional_columns: vec![],
+    };
+
+    let sub_folder = create_sub_folder()?;
+    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+
+    let mut tera = Tera::default();
+    tera.add_raw_template(
+        &detail_file.to_string_lossy(),
+        template::PLAIN_EXTERNAL_DETAIL_TEMPLATE,
+    )?;
+
+    let mut ctx = Context::new();
+    ctx.insert("actual", &actual.as_ref().to_string_lossy());
+    ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
+    ctx.insert("stdout", stdout);
+    ctx.insert("stderr", stderr);
+    ctx.insert("message", message);
+
+    let file = fat_io_wrap_std(&detail_file, &File::create)?;
+    debug!("detail html {:?} created", &detail_file);
+
+    tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
+
+    result.detail_path = Some(sub_folder);
+
+    Ok(result)
+}
+
 fn create_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,

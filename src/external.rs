@@ -1,5 +1,5 @@
 use crate::report::FileCompareResult;
-use crate::Error;
+use crate::{report, Error};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -25,32 +25,38 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         .arg(nominal.as_ref())
         .arg(actual.as_ref())
         .output();
-    if let Ok(output) = output {
-        info!(
-            "External stdout: {}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        info!(
-            "External stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        if !output.status.success() {
-            error!("External checker denied file {}", &compared_file_name);
+    let (stdout_string, stderr_string, error_message) = if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        info!("External stdout: {}", stdout.as_str());
+        info!("External stderr: {}", stderr.as_str());
+        let error_message = if !output.status.success() {
+            let message = format!("External checker denied file {}", &compared_file_name);
+            error!("{}", &message);
             is_error = true;
-        }
+            message
+        } else {
+            "".to_owned()
+        };
+
+        (stdout, stderr, error_message)
     } else {
-        error!(
+        let error_message = format!(
             "External checker execution failed for file {}",
             &compared_file_name
         );
+        error!("{}", error_message);
         is_error = true;
-    }
-    Ok(FileCompareResult {
-        compared_file_name,
+        ("".to_owned(), "".to_owned(), error_message)
+    };
+    Ok(report::write_external_detail(
+        nominal,
+        actual,
         is_error,
-        detail_path: None,
-        additional_columns: vec![],
-    })
+        &stdout_string,
+        &stderr_string,
+        &error_message,
+    )?)
 }
 #[cfg(test)]
 mod tests {

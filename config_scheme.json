@@ -283,7 +283,7 @@
           "additionalProperties": false
         },
         {
-          "description": "replace found cell using row and columnd index by a deleted marker",
+          "description": "replace found cell using row and column index by a deleted marker",
           "type": "object",
           "required": [
             "DeleteCellByNumber"

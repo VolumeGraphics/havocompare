@@ -23,7 +23,7 @@ pub enum Preprocessor {
     DeleteRowByNumber(usize),
     /// Replace all fields in row  where at least a single field matches regex by a deleted marker
     DeleteRowByRegex(String),
-    /// replace found cell using row and columnd index by a deleted marker
+    /// replace found cell using row and column index by a deleted marker
     DeleteCellByNumber {
         /// column number
         column: usize,
