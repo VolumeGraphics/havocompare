@@ -10,7 +10,6 @@ pub const INDEX_TEMPLATE: &str = r###"
 
         .error {
             background-color: #fbcccc !important;
-            color:red;
         }
 
         h3 {
@@ -33,6 +32,10 @@ pub const INDEX_TEMPLATE: &str = r###"
 		table.dataTable tbody td {
 			padding:0px 0px !important;
 		}
+		
+		.text-error {
+			color:red;
+		}
 
     </style>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
@@ -41,26 +44,64 @@ pub const INDEX_TEMPLATE: &str = r###"
 
 <div id="accordion">
 {% for rule_report in rule_results %}
-	<h3>{{ rule_report.rule.name }}</h3>
+	<h3>
+		{{ rule_report.rule.name }}
+	</h3>
 	<div class="container">
 	<table class="report cell-border">
 		<thead>
-		<tr>
-			<th>File</th>
-			<th>Result</th>
-		</tr>
+		{% if rule_report.rule.FileProperties %}
+			<tr>
+				<th>File</th>
+				<th colspan="2">File Size</th>
+				<th colspan="2">Creation date</th>
+				<th>Result</th>
+			</tr>
+			<tr>
+				<th></th>
+				<th>Nominal</th>
+				<th>Actual</th>
+				<th>Nominal</th>
+				<th>Actual</th>
+				<th></th>
+			</tr>
+		{% else %}
+			<tr>
+				<th>File</th>
+				<th>Result</th>
+			</tr>
+		{% endif %}
 		</thead>
 		<tbody>
 			{% for file in rule_report.compare_results %}
 				<tr {% if file.is_error %} class="error" {% endif %}>
-					<td>
-						{% if file.detail_path %}
-							<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.compared_file_name }}</a>
-						{% else %}
+					{% if rule_report.rule.FileProperties %}
+						<td {% if file.additional_columns.0.is_error %} class="text-error" {% endif %}>
 							{{ file.compared_file_name }}
-						{% endif %}
-					</td>
-					<td>{% if file.is_error %} <span>&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
+						</td>
+						<td {% if file.additional_columns.1.is_error %} class="text-error" {% endif %}>
+							{{ file.additional_columns.1.nominal_value }}
+						</td>
+						<td {% if file.additional_columns.1.is_error %} class="text-error" {% endif %}>
+							{{ file.additional_columns.1.actual_value }}
+						</td>
+						<td {% if file.additional_columns.2.is_error %} class="text-error" {% endif %}>
+							{{ file.additional_columns.2.nominal_value }}
+						</td>
+						<td {% if file.additional_columns.2.is_error %} class="text-error" {% endif %}>
+							{{ file.additional_columns.2.actual_value }}
+						</td>
+						<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
+					{% else %}
+							<td>
+								{% if file.detail_path %}
+									<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.compared_file_name }}</a>
+								{% else %}
+									{{ file.compared_file_name }}
+								{% endif %}
+							</td>
+							<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>
+					{% endif %}
 				</tr>
 			{% endfor %}
 		</tbody>
@@ -514,6 +555,92 @@ pub const ERROR_DETAIL_TEMPLATE: &str = r###"
 <p style="color:red">
 	{{ error }}
 </p>
+
+
+</body>
+</html>
+"###;
+
+pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Results</title>
+     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+
+     <style>
+
+		h3 {
+			background-color:black;
+			color:white;
+			padding:10px;
+			margin:10px 0;
+			cursor:pointer;
+		}
+
+		table {
+		  table-layout: fixed;
+		}
+
+        table.dataTable tr.odd {
+            background-color: #dddddd;
+        }
+
+		.has_diff {
+			color: #0d6efdf0;
+		}
+
+		.has_error {
+			color:red;
+		}
+
+		#compare th {
+			text-align:left;
+			background-color: #cccccc;
+			padding:10px;
+		}
+
+		#compare td {
+			white-space: pre;
+		}
+
+		#compare td:first-child {
+			border-right: 1px solid black;
+		}
+
+		table#compare {
+			border:1px solid grey;
+		}
+
+    </style>
+</head>
+<body>
+
+<h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
+
+<p class="has_error">
+{{ message }}
+</p>
+
+<table id="compare">
+	<thead>
+		<tr>
+			<th>Stdout</th>
+			<th>Stderr</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>
+{{ stdout }}
+			</td>
+			<td class="has_error">
+{{ stderr }}
+			</td>
+		</tr>
+	</tbody>
+</table>
 
 
 </body>
