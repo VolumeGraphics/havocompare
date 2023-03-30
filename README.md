@@ -228,6 +228,7 @@ rules:
 - Add file metadata comparison
 - Add external checking
 - Add and adjust reports for file metadata comparison and external checking
+- Add csv header comparison. Previously, the report only marks the differences but not returning any error.
 - Added config yaml validation command to check whether file can be loaded or not
 
 ### 0.2.4
