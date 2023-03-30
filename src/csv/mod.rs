@@ -511,7 +511,10 @@ pub(crate) fn compare_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::csv::DiffType::{DifferentValueTypes, OutOfTolerance, UnequalStrings};
+    use crate::csv::DiffType::{
+        DifferentValueTypes, OutOfTolerance, UnequalHeader, UnequalStrings,
+    };
+    use crate::csv::Preprocessor::ExtractHeaders;
     use std::io::Cursor;
 
     const NOMINAL: &str = "nominal";
@@ -646,6 +649,43 @@ mod tests {
             assert_eq!(actual.get_quantity().unwrap().value, 0.00204398);
             assert_eq!(position.col, 1);
             assert_eq!(position.row, 12);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn header_diffs_on_table_level() {
+        let config = CSVCompareConfig {
+            preprocessing: Some(vec![ExtractHeaders]),
+            exclude_field_regex: None,
+            comparison_modes: vec![],
+            delimiters: Delimiters::default(),
+        };
+
+        let mut actual = Table::from_reader(
+            File::open("tests/csv/data/Annotations.csv").unwrap(),
+            &config.delimiters,
+        )
+        .unwrap();
+
+        ExtractHeaders.process(&mut actual).unwrap();
+
+        let mut nominal = Table::from_reader(
+            File::open("tests/csv/data/Annotations_diff.csv").unwrap(),
+            &config.delimiters,
+        )
+        .unwrap();
+
+        ExtractHeaders.process(&mut nominal).unwrap();
+
+        let diff = compare_tables(&nominal, &actual, &config).unwrap();
+        assert_eq!(diff.len(), 3);
+
+        let first_diff = diff.first().unwrap();
+        if let UnequalHeader { nominal, actual } = first_diff {
+            assert_eq!(nominal, "Position x [mm]");
+            assert_eq!(actual, "Pos. x [mm]");
         } else {
             unreachable!();
         }
