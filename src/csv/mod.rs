@@ -83,6 +83,10 @@ pub(crate) enum DiffType {
         actual: Value,
         position: Position,
     },
+    UnequalHeader {
+        nominal: String,
+        actual: String,
+    },
 }
 
 impl Display for DiffType {
@@ -122,6 +126,14 @@ impl Display for DiffType {
                     f,
                     "Line: {}, Col: {} -- Different strings -- Expected {}, Found {}",
                     position.row, position.col, nominal, actual
+                )
+                .unwrap_or_default();
+            }
+            DiffType::UnequalHeader { nominal, actual } => {
+                write!(
+                    f,
+                    "Different header strings -- Expected {}, Found {}",
+                    nominal, actual
                 )
                 .unwrap_or_default();
             }
@@ -361,6 +373,15 @@ pub(crate) fn compare_tables(
         .zip(actual.columns.iter())
         .enumerate()
     {
+        if let (Some(nom_header), Some(act_header)) = (&col_nom.header, &col_act.header) {
+            if nom_header != act_header {
+                diffs.extend(vec![DiffType::UnequalHeader {
+                    nominal: nom_header.to_owned(),
+                    actual: act_header.to_owned(),
+                }]);
+            }
+        }
+
         for (row, (val_nom, val_act)) in col_nom.rows.iter().zip(col_act.rows.iter()).enumerate() {
             let position = Position { row, col };
             let diffs_field = compare_values(val_nom, val_act, config, position)?;
