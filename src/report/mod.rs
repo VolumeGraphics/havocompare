@@ -210,6 +210,9 @@ pub(crate) fn write_csv_detail(
                                     DiffType::UnequalStrings { position, .. } => position,
                                     DiffType::OutOfTolerance { position, .. } => position,
                                     DiffType::DifferentValueTypes { position, .. } => position,
+                                    _ => {
+                                        return false;
+                                    }
                                 };
 
                                 position.row == current_pos.row && position.col == current_pos.col
@@ -222,6 +225,7 @@ pub(crate) fn write_csv_detail(
                                 DiffType::DifferentValueTypes { .. } => {
                                     "Different value types".to_owned()
                                 }
+                                _ => "Unknown difference".to_owned(),
                             })
                             .collect(),
                     };

@@ -1,0 +1,7 @@
+﻿Name,Position x [mm],Position y [mm],Position z [mm],Deviation [mm],Min. Deviation [mm],Max. Deviation [mm],Description,Image,Focused image,Captures,Tolerance status,Type
+Deviation 5,-22.663068771,39.907196045,-49.257804871,>= 0.600000024,n/a,n/a,,Off,Off,0,No tolerance,Rule based
+Deviation 4,-22.826931000,39.911468506,-20.156715393,>= 0.600000024,n/a,n/a,,Off,Off,0,No tolerance,Rule based
+Deviation 3,-22.591037750,39.901805878,-33.957965851,>= 0.600000024,n/a,n/a,,Off,Off,0,No tolerance,Rule based
+Deviation 2,-22.739957809,39.908485413,-65.457649231,>= 0.600000024,n/a,n/a,,Off,Off,0,No tolerance,Rule based
+Deviation 1,-22.650812149,41.070060730,-80.756362915,>= 0.600000024,n/a,n/a,,Off,Off,0,No tolerance,Rule based
+

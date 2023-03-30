@@ -337,14 +337,14 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 <table id="report" class="cell-border">
     <thead>
     {% if headers.columns|length > 0 %}
-    	<tr>
-	    	<th>{% if headers.has_diff %}<br>&nbsp;{% endif %}</th>
-	    	<th>{% if headers.has_diff %}&nbsp;<br>{% endif %}</th>
+    	<tr {% if headers.has_diff %} class="error" {% endif %}>
+	    	<th>{% if headers.has_diff %}x<br>&nbsp;{% endif %}</th>
+	    	<th>{% if headers.has_diff %}&nbsp;<br>x{% endif %}</th>
 			{% for col in headers.columns %}
 				<th>
 					{{ col.nominal_value }}
 					{% if headers.has_diff %}
-						<div class="{% if col.nominal_value != col.actual_value %} actual {% endif %}">{{ col.actual_value }}</div>
+						<div class="{% if col.nominal_value != col.actual_value %} diffs {% endif %}">{{ col.actual_value }}</div>
 					{% endif %}
 				</th>
 			{% endfor %}
