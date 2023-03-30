@@ -346,6 +346,27 @@ pub fn get_schema() -> Result<String, Error> {
     Ok(serde_json::to_string_pretty(&schema)?)
 }
 
+/// Try to load config yaml and check whether it is a valid one. Returns true if file can be loaded, otherwise false
+pub fn validate_config(config_file: impl AsRef<Path>) -> bool {
+    let config_file = config_file.as_ref();
+    let config_file_string = config_file.to_string_lossy();
+    if !config_file.exists() {
+        error!("Could not find config file: {config_file_string}");
+        return false;
+    }
+
+    match ConfigurationFile::from_file(config_file) {
+        Ok(_) => {
+            info!("Config file {config_file_string} loaded successfully");
+            true
+        }
+        Err(_) => {
+            error!("Could not load config file {config_file_string}");
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
