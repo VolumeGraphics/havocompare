@@ -360,8 +360,11 @@ pub fn validate_config(config_file: impl AsRef<Path>) -> bool {
             info!("Config file {config_file_string} loaded successfully");
             true
         }
-        Err(_) => {
-            error!("Could not load config file {config_file_string}");
+        Err(e) => {
+            error!(
+                "Could not load config file {config_file_string}: {}",
+                e.to_string()
+            );
             false
         }
     }
