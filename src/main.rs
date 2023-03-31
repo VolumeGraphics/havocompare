@@ -1,5 +1,5 @@
 use clap::Parser;
-use havocompare::get_schema;
+use havocompare::{compare_folders, get_schema, validate_config};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -22,6 +22,9 @@ enum Commands {
 
     /// Export the JsonSchema for the config files
     Schema,
+
+    /// Validate config yaml
+    Validate { compare_config: String },
 }
 
 #[derive(Parser)]
@@ -65,9 +68,15 @@ fn main() {
             report_config,
         } => {
             let result =
-                havocompare::compare_folders(nominal, actual, compare_config, report_config)
-                    .unwrap_or(false);
+                compare_folders(nominal, actual, compare_config, report_config).unwrap_or(false);
             if result {
+                std::process::exit(0);
+            } else {
+                std::process::exit(1);
+            }
+        }
+        Commands::Validate { compare_config } => {
+            if validate_config(compare_config) {
                 std::process::exit(0);
             } else {
                 std::process::exit(1);
