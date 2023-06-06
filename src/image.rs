@@ -3,7 +3,7 @@ use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::error;
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug)]
 /// Image comparison config options
@@ -55,12 +55,9 @@ pub fn compare_paths<P: AsRef<Path>>(
     let out_path = (nominal_file_name + "diff_image.png").to_string();
 
     if result.score < config.threshold {
-        if let Some(color_map) = result.image.as_ref().map(|i| i.to_color_map()) {
-            info!("Writing diff image to: {}", out_path.as_str());
-            color_map.save(PathBuf::from(&out_path))?;
-        } else {
-            error!("Algorithm did not produce compare-image, so we cannot save it.");
-        }
+        let color_map = result.image.to_color_map();
+        color_map.save(PathBuf::from(&out_path))?;
+
         let error_message = format!(
             "Diff for image {} was not met, expected {}, found {}",
             nominal_path.as_ref().to_string_lossy(),
