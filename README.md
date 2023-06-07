@@ -223,6 +223,9 @@ rules:
 
 ## Changelog
 
+### 0.3.1
+- Fix swapped actual and nominal for hash and text-compares
+
 ### 0.3.0
 - Allow RGBA image comparison
 - Add file metadata comparison
