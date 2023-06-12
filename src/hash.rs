@@ -59,8 +59,8 @@ impl Default for HashConfig {
 }
 
 pub fn compare_files<P: AsRef<Path>>(
-    actual_path: P,
     nominal_path: P,
+    actual_path: P,
     config: &HashConfig,
 ) -> Result<report::FileCompareResult, Error> {
     let act = config
@@ -73,8 +73,8 @@ pub fn compare_files<P: AsRef<Path>>(
     let diff = if act != nom {
         vec![format!(
             "Nominal file's hash is '{}' actual is '{}'",
-            HEXLOWER.encode(&act),
-            HEXLOWER.encode(&nom)
+            HEXLOWER.encode(&nom),
+            HEXLOWER.encode(&act)
         )]
     } else {
         vec![]

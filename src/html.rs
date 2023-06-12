@@ -55,8 +55,8 @@ pub enum Error {
 }
 
 pub fn compare_files<P: AsRef<Path>>(
-    actual_path: P,
     nominal_path: P,
+    actual_path: P,
     config: &HTMLCompareConfig,
 ) -> Result<report::FileCompareResult, Error> {
     let actual = BufReader::new(fat_io_wrap_std(actual_path.as_ref(), &File::open)?);
