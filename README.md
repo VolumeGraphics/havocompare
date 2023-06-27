@@ -223,6 +223,10 @@ rules:
 
 ## Changelog
 
+### 0.3.2
+- Allow direct opening of reports after comparison with `--open`
+- Parsing failures when running `compare` are now propagated to terminal
+
 ### 0.3.1
 - Fix swapped actual and nominal for hash and text-compares
 
