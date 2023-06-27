@@ -70,7 +70,7 @@ pub fn compare_files<P: AsRef<Path>>(
         .lines()
         .enumerate()
         .filter_map(|l| l.1.ok().map(|a| (l.0, a)))
-        .zip(nominal.lines().filter_map(|l| l.ok()))
+        .zip(nominal.lines().map_while(Result::ok))
         .filter(|((_, a), n)|
             exclusion_list.iter().all(|exc| !exc.is_match(a)) && exclusion_list.iter().all(|exc| !exc.is_match(n))
         )

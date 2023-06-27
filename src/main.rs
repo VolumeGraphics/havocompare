@@ -1,6 +1,8 @@
+use std::path::Path;
+use anyhow::anyhow;
 use clap::Parser;
 use havocompare::{compare_folders, get_schema, validate_config};
-use tracing::Level;
+use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 const DEFAULT_REPORT_FOLDER: &str = "report";
@@ -18,6 +20,9 @@ enum Commands {
         /// Optional: Folder to store the report to, if not set the default location will be chosen.
         #[arg(short, long = "report_path", default_value_t = DEFAULT_REPORT_FOLDER.to_string())]
         report_config: String,
+        /// Open the report immediately after comparison
+        #[arg(short, long)]
+        open: bool
     },
 
     /// Export the JsonSchema for the config files
@@ -38,7 +43,7 @@ struct Arguments {
     command: Commands,
 }
 
-fn main() {
+fn main() -> Result<(), vg_errortools::MainError> {
     let args = Arguments::parse();
     let level = if args.verbose {
         Level::DEBUG
@@ -59,28 +64,34 @@ fn main() {
                 "{}",
                 get_schema().expect("Error occurred writing json schema")
             );
-            std::process::exit(0);
+            Ok(())
         }
         Commands::Compare {
             compare_config,
             nominal,
             actual,
             report_config,
+            open
         } => {
+            let report_path = Path::new(report_config.as_str());
             let result =
-                compare_folders(nominal, actual, compare_config, report_config).unwrap_or(false);
+                compare_folders(nominal, actual, compare_config, report_path)?;
+            if open {
+                info!("Opening report");
+                opener::open(report_path.join("index.html")).expect("Could not open report!");
+            }
             if result {
-                std::process::exit(0);
+                Ok(())
             } else {
-                std::process::exit(1);
+                Err(anyhow!("Comparison failed!").into())
             }
         }
         Commands::Validate { compare_config } => {
             if validate_config(compare_config) {
-                std::process::exit(0);
+                Ok(())
             } else {
-                std::process::exit(1);
+                Err(anyhow!("Validation failed!").into())
             }
         }
-    };
+    }
 }
