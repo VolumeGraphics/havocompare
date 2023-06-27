@@ -79,7 +79,7 @@ pub(crate) fn guess_format_from_reader<R: Read + Seek>(
 
     let bufreader = BufReader::new(&mut input);
     debug!("Guessing format from reader...");
-    for line in bufreader.lines().filter_map(|l| l.ok()) {
+    for line in bufreader.lines().map_while(Result::ok) {
         debug!("Guessing format from line: '{}'", line.as_str());
         format = guess_format_from_line(line.as_str(), format.0)?;
         debug!("Current format: {:?}", format);

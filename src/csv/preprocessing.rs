@@ -231,6 +231,29 @@ mod tests {
         .unwrap()
     }
 
+    fn setup_table_two(delimiters: Option<Delimiters>) -> Table {
+        let delimiters = delimiters.unwrap_or_default();
+        Table::from_reader(
+            File::open("tests/csv/data/defects_headers.csv").unwrap(),
+            &delimiters,
+        )
+            .unwrap()
+    }
+
+    #[test]
+    fn test_extract_headers_two() {
+        let mut table = setup_table_two(None);
+        extract_headers(&mut table).unwrap();
+        assert_eq!(
+            table.columns.first().unwrap().header.as_deref().unwrap(),
+            "Entry"
+        );
+        assert_eq!(
+            table.columns.last().unwrap().header.as_deref().unwrap(),
+            "Radius"
+        );
+    }
+
     #[test]
     fn test_extract_headers() {
         let mut table = setup_table(None);
@@ -260,7 +283,7 @@ mod tests {
             .unwrap()
             .rows
             .iter()
-            .all(|v| *v == csv::Value::deleted()));
+            .all(|v| *v == Value::deleted()));
     }
 
     #[test]
@@ -278,7 +301,7 @@ mod tests {
             .unwrap()
             .rows
             .iter()
-            .all(|v| *v == csv::Value::deleted()));
+            .all(|v| *v == Value::deleted()));
     }
 
     #[test]
