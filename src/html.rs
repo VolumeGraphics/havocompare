@@ -1,4 +1,5 @@
 use crate::report;
+use crate::report::{DiffDetail, Difference};
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -58,14 +59,12 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &HTMLCompareConfig,
-) -> Result<report::FileCompareResult, Error> {
+) -> Result<Difference, Error> {
     let actual = BufReader::new(fat_io_wrap_std(actual_path.as_ref(), &File::open)?);
     let nominal = BufReader::new(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?);
 
-    let mut diffs: Vec<String> = Vec::new();
-
     let exclusion_list = config.get_ignore_list()?;
-
+    let mut difference = Difference::new_for_file(nominal_path);
     actual
         .lines()
         .enumerate()
@@ -84,16 +83,12 @@ pub fn compare_files<P: AsRef<Path>>(
                 );
 
                 error!("{}" , &error);
-
-                diffs.push(error);
+                difference.push_detail(DiffDetail::Text {score: distance, line: l});
+                difference.error();
             }
         });
 
-    Ok(report::write_html_detail(
-        nominal_path.as_ref(),
-        actual_path.as_ref(),
-        &diffs,
-    )?)
+    Ok(difference)
 }
 
 #[cfg(test)]

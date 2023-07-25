@@ -1,4 +1,4 @@
-use crate::report::{get_relative_path, AdditionalOverviewColumn, FileCompareResult};
+use crate::report::{get_relative_path, DiffDetail, Difference};
 use crate::Error;
 use chrono::offset::Utc;
 use chrono::DateTime;
@@ -23,44 +23,51 @@ pub struct PropertiesConfig {
     forbid_name_regex: Option<String>,
 }
 
+#[derive(Serialize, Debug, Clone)]
+pub enum MetaDataPropertyDiff {
+    Size { nominal: u64, actual: u64 },
+    IllegalName,
+    CreationDate { nominal: String, actual: String },
+}
+
 fn regex_matches_any_path(
     nominal_path: &str,
     actual_path: &str,
     regex: &str,
-) -> Result<AdditionalOverviewColumn, Error> {
-    let mut result: AdditionalOverviewColumn = Default::default();
+) -> Result<Option<Difference>, Error> {
     let regex = Regex::new(regex)?;
     if regex.is_match(nominal_path) || regex.is_match(actual_path) {
         error!("One of the files ({nominal_path}, {actual_path}) matched the regex {regex}");
+        let mut result = Difference::new_for_file(nominal_path);
+        result.error();
+        result.push_detail(DiffDetail::Properties(MetaDataPropertyDiff::IllegalName));
         result.is_error = true;
-        return Ok(result);
+        return Ok(Some(result));
     }
-    Ok(result)
+    Ok(None)
 }
 
-fn file_size_out_of_tolerance(
-    nominal: &Path,
-    actual: &Path,
-    tolerance: u64,
-) -> AdditionalOverviewColumn {
-    let mut result: AdditionalOverviewColumn = Default::default();
+fn file_size_out_of_tolerance(nominal: &Path, actual: &Path, tolerance: u64) -> Difference {
+    let mut result = Difference::new_for_file(nominal);
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
         let size_diff =
             (nominal_meta.len() as i128 - actual_meta.len() as i128).unsigned_abs() as u64;
         if size_diff > tolerance {
             error!("File size tolerance exceeded, diff is {size_diff}, tolerance was {tolerance}");
-            result.is_error = true;
+            result.error();
         }
-
-        result.nominal_value = nominal_meta.len().to_string();
-        result.actual_value = actual_meta.len().to_string();
-        result.diff_value = size_diff.to_string();
+        result.push_detail(DiffDetail::Properties(MetaDataPropertyDiff::Size {
+            nominal: nominal_meta.len(),
+            actual: actual_meta.len(),
+        }));
     } else {
-        error!(
+        let msg = format!(
             "Could not get file metadata for either: {} or {}",
             &nominal.to_string_lossy(),
             &actual.to_string_lossy()
         );
+        error!("{}", &msg);
+        result.push_detail(DiffDetail::Error(msg));
         result.is_error = true;
     }
     result
@@ -70,16 +77,18 @@ fn file_modification_time_out_of_tolerance(
     nominal: &Path,
     actual: &Path,
     tolerance: u64,
-) -> AdditionalOverviewColumn {
-    let mut result: AdditionalOverviewColumn = Default::default();
+) -> Difference {
+    let mut result = Difference::new_for_file(nominal);
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
         if let (Ok(mod_time_act), Ok(mod_time_nom)) =
             (nominal_meta.modified(), actual_meta.modified())
         {
             let nominal_datetime: DateTime<Utc> = mod_time_nom.into();
             let actual_datetime: DateTime<Utc> = mod_time_act.into();
-            result.nominal_value = nominal_datetime.format("%Y-%m-%d %T").to_string();
-            result.actual_value = actual_datetime.format("%Y-%m-%d %T").to_string();
+            result.push_detail(DiffDetail::Properties(MetaDataPropertyDiff::CreationDate {
+                nominal: nominal_datetime.format("%Y-%m-%d %T").to_string(),
+                actual: actual_datetime.format("%Y-%m-%d %T").to_string(),
+            }));
 
             let now = SystemTime::now();
 
@@ -93,22 +102,27 @@ fn file_modification_time_out_of_tolerance(
                     error!("Modification times too far off difference in timestamps {time_diff} s - tolerance {tolerance} s");
                     result.is_error = true;
                 }
-
-                result.diff_value = time_diff.to_string();
             } else {
-                error!("Could not calculate duration between modification timestamps");
+                let msg = format!("Could not calculate duration between modification timestamps");
+                error!("{}", &msg);
+                result.push_detail(DiffDetail::Error(msg));
                 result.is_error = true;
             }
         } else {
-            error!("Could not read file modification timestamps");
+            let msg = format!("Could not read file modification timestamps");
+            error!("{}", &msg);
+            result.push_detail(DiffDetail::Error(msg));
             result.is_error = true;
         }
     } else {
-        error!(
+        let msg = format!(
             "Could not get file metadata for either: {} or {}",
             &nominal.to_string_lossy(),
             &actual.to_string_lossy()
         );
+        error!("{}", &msg);
+        result.push_detail(DiffDetail::Error(msg));
+
         result.is_error = true;
     }
     result
@@ -118,51 +132,34 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
     nominal: P,
     actual: P,
     config: &PropertiesConfig,
-) -> Result<FileCompareResult, Error> {
+) -> Result<Difference, Error> {
     let nominal = nominal.as_ref();
     let actual = actual.as_ref();
-    let mut is_error = false;
     let compared_file_name_full = nominal.to_string_lossy();
     let actual_file_name_full = actual.to_string_lossy();
-    let compared_file_name = get_relative_path(actual, nominal)
+    get_relative_path(actual, nominal)
         .to_string_lossy()
         .to_string();
 
-    let mut additional_columns: Vec<AdditionalOverviewColumn> = Vec::new();
-
-    let result: AdditionalOverviewColumn =
-        if let Some(name_regex) = config.forbid_name_regex.as_deref() {
-            regex_matches_any_path(&compared_file_name_full, &actual_file_name_full, name_regex)?
-        } else {
-            Default::default()
-        };
-    is_error |= result.is_error;
-    additional_columns.push(result);
-
-    let result: AdditionalOverviewColumn = if let Some(tolerance) = config.file_size_tolerance_bytes
-    {
-        file_size_out_of_tolerance(nominal, actual, tolerance)
+    let mut total_diff = Difference::new_for_file(nominal);
+    let result = if let Some(name_regex) = config.forbid_name_regex.as_deref() {
+        regex_matches_any_path(&compared_file_name_full, &actual_file_name_full, name_regex)?
     } else {
-        Default::default()
+        None
     };
-    is_error |= result.is_error;
-    additional_columns.push(result);
+    result.map(|r| total_diff.join(r));
 
-    let result: AdditionalOverviewColumn =
-        if let Some(tolerance) = config.modification_date_tolerance_secs {
-            file_modification_time_out_of_tolerance(nominal, actual, tolerance)
-        } else {
-            Default::default()
-        };
-    is_error |= result.is_error;
-    additional_columns.push(result);
+    let result = config
+        .file_size_tolerance_bytes
+        .map(|tolerance| file_size_out_of_tolerance(nominal, actual, tolerance));
+    result.map(|r| total_diff.join(r));
 
-    Ok(FileCompareResult {
-        compared_file_name,
-        is_error,
-        detail_path: None,
-        additional_columns,
-    })
+    let result = config
+        .modification_date_tolerance_secs
+        .map(|tolerance| file_modification_time_out_of_tolerance(nominal, actual, tolerance));
+    result.map(|r| total_diff.join(r));
+
+    Ok(total_diff)
 }
 
 #[cfg(test)]

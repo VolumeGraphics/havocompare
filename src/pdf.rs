@@ -1,5 +1,6 @@
 use crate::html::HTMLCompareConfig;
 use crate::report;
+use crate::report::{DiffDetail, Difference};
 use pdf_extract::extract_text;
 use std::path::Path;
 use strsim::normalized_damerau_levenshtein;
@@ -24,17 +25,15 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &HTMLCompareConfig,
-) -> Result<report::FileCompareResult, Error> {
+) -> Result<Difference, Error> {
     info!("Extracting text from actual pdf");
     let actual = extract_text(actual_path.as_ref())?;
 
     info!("Extracting text from nominal pdf");
     let nominal = extract_text(nominal_path.as_ref())?;
 
-    let mut diffs: Vec<(usize, String)> = Vec::new();
-
     let exclusion_list = config.get_ignore_list()?;
-
+    let mut difference = Difference::new_for_file(&nominal);
     actual
         .lines()
         .enumerate()
@@ -52,18 +51,12 @@ pub fn compare_files<P: AsRef<Path>>(
                 );
 
                 error!("{}" , &error);
-
-                diffs.push((l, error));
+                difference.push_detail(DiffDetail::Text {score: distance, line: l});
+                difference.error();
             }
         });
 
-    Ok(report::write_pdf_detail(
-        nominal_path.as_ref(),
-        actual_path.as_ref(),
-        &nominal,
-        &actual,
-        &diffs,
-    )?)
+    Ok(difference)
 }
 
 #[cfg(test)]

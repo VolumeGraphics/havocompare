@@ -489,23 +489,21 @@ pub(crate) fn compare_paths(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     config: &CSVCompareConfig,
-) -> Result<report::FileCompareResult, Error> {
+) -> Result<report::Difference, Error> {
     let nominal_file = fat_io_wrap_std(nominal.as_ref(), &File::open)?;
     let actual_file = fat_io_wrap_std(actual.as_ref(), &File::open)?;
 
-    let (nominal_table, actual_table, results) =
-        get_diffs_readers(&nominal_file, &actual_file, config)?;
+    let (_, _, results) = get_diffs_readers(&nominal_file, &actual_file, config)?;
     results.iter().for_each(|error| {
         error!("{}", &error);
     });
-
-    Ok(report::write_csv_detail(
-        nominal_table,
-        actual_table,
-        nominal.as_ref(),
-        actual.as_ref(),
-        results.as_slice(),
-    )?)
+    let is_error = !results.is_empty();
+    let result = report::Difference {
+        file_path: nominal.as_ref().to_path_buf(),
+        is_error,
+        detail: results.into_iter().map(report::DiffDetail::CSV).collect(),
+    };
+    Ok(result)
 }
 
 #[cfg(test)]

@@ -27,7 +27,7 @@ mod report;
 use crate::external::ExternalConfig;
 pub use crate::html::HTMLCompareConfig;
 use crate::properties::PropertiesConfig;
-use crate::report::FileCompareResult;
+use crate::report::{DiffDetail, Difference};
 use schemars::schema_for;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -161,11 +161,7 @@ fn filter_exclude(paths: Vec<PathBuf>, excludes: Vec<PathBuf>) -> Vec<PathBuf> {
         .collect()
 }
 
-fn process_file(
-    nominal: impl AsRef<Path>,
-    actual: impl AsRef<Path>,
-    rule: &Rule,
-) -> FileCompareResult {
+fn process_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>, rule: &Rule) -> Difference {
     let file_name_nominal = nominal.as_ref().to_string_lossy();
     let file_name_actual = actual.as_ref().to_string_lossy();
     let _file_span = span!(tracing::Level::INFO, "Processing");
@@ -173,7 +169,7 @@ fn process_file(
 
     info!("File: {file_name_nominal} | {file_name_actual}");
 
-    let compare_result: Result<FileCompareResult, Box<dyn std::error::Error>> = {
+    let compare_result: Result<Difference, Box<dyn std::error::Error>> = {
         match &rule.file_type {
             ComparisonMode::CSV(conf) => {
                 csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
@@ -200,22 +196,25 @@ fn process_file(
             }
         }
     };
-
-    match compare_result {
-        Ok(result) => {
-            if result.is_error {
-                error!("Files didn't match");
-            } else {
-                debug!("Files matched");
-            }
-
-            result
-        }
+    let compare_result = match compare_result {
+        Ok(r) => r,
         Err(e) => {
-            error!("Problem comparing the files");
-            report::write_error_detail(nominal, actual, e)
+            let e = e.to_string();
+            error!("Problem comparing the files {}", &e);
+            let mut d = Difference::new_for_file(nominal);
+            d.error();
+            d.push_detail(DiffDetail::Error(e));
+            d
         }
+    };
+
+    if compare_result.is_error {
+        error!("Files didn't match");
+    } else {
+        debug!("Files matched");
     }
+
+    compare_result
 }
 
 fn get_files(
@@ -232,7 +231,7 @@ fn process_rule(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     rule: &Rule,
-    compare_results: &mut Vec<FileCompareResult>,
+    compare_results: &mut Vec<Difference>,
 ) -> Result<bool, Error> {
     let _file_span = span!(tracing::Level::INFO, "Rule");
     let _file_span = _file_span.enter();
@@ -276,9 +275,7 @@ fn process_rule(
         .zip(actual_cleaned_paths.into_iter())
         .for_each(|(n, a)| {
             let compare_result = process_file(n, a, rule);
-
             all_okay &= !compare_result.is_error;
-
             compare_results.push(compare_result);
         });
 
@@ -292,13 +289,13 @@ pub fn compare_folders_cfg(
     config_struct: ConfigurationFile,
     report_path: impl AsRef<Path>,
 ) -> Result<bool, Error> {
-    let mut rule_results: Vec<report::RuleResult> = Vec::new();
+    let mut rule_results: Vec<report::RuleDifferences> = Vec::new();
 
     let results: Vec<bool> = config_struct
         .rules
         .into_iter()
         .map(|rule| {
-            let mut compare_results: Vec<FileCompareResult> = Vec::new();
+            let mut compare_results: Vec<Difference> = Vec::new();
             let okay = process_rule(
                 nominal.as_ref(),
                 actual.as_ref(),
@@ -315,9 +312,9 @@ pub fn compare_folders_cfg(
                     false
                 }
             };
-            rule_results.push(report::RuleResult {
+            rule_results.push(report::RuleDifferences {
                 rule,
-                compare_results,
+                diffs: compare_results,
             });
 
             result
@@ -325,7 +322,7 @@ pub fn compare_folders_cfg(
         .collect();
 
     let all_okay = results.iter().all(|result| *result);
-    report::create(&rule_results, report_path)?;
+    report::create_json(&rule_results, report_path)?;
     Ok(all_okay)
 }
 

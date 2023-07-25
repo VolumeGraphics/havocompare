@@ -1,6 +1,7 @@
 use crate::{report, Deserialize, Serialize};
 use data_encoding::HEXLOWER;
 
+use crate::report::{DiffDetail, Difference};
 use schemars_derive::JsonSchema;
 use std::fs::File;
 use std::io::Read;
@@ -62,7 +63,7 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &HashConfig,
-) -> Result<report::FileCompareResult, Error> {
+) -> Result<Difference, Error> {
     let act = config
         .function
         .hash_file(fat_io_wrap_std(actual_path.as_ref(), &File::open)?)?;
@@ -70,21 +71,15 @@ pub fn compare_files<P: AsRef<Path>>(
         .function
         .hash_file(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?)?;
 
-    let diff = if act != nom {
-        vec![format!(
-            "Nominal file's hash is '{}' actual is '{}'",
-            HEXLOWER.encode(&nom),
-            HEXLOWER.encode(&act)
-        )]
-    } else {
-        vec![]
-    };
-
-    Ok(report::write_html_detail(
-        nominal_path,
-        actual_path,
-        diff.as_slice(),
-    )?)
+    let mut difference = Difference::new_for_file(nominal_path);
+    if act != nom {
+        difference.push_detail(DiffDetail::Hash {
+            actual: HEXLOWER.encode(&act),
+            nominal: HEXLOWER.encode(&nom),
+        });
+        difference.error();
+    }
+    Ok(difference)
 }
 
 #[cfg(test)]

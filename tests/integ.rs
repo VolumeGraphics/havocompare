@@ -11,8 +11,8 @@ fn simple_test_identity() {
 
 #[test]
 fn display_of_status_message_in_cm_tables() {
-    let report_dir =
-        tempfile::tempdir().expect("Could not generate temporary directory for report");
+    let report_dir = "/tmp/test_report/";
+    //  tempfile::tempdir().expect("Could not generate temporary directory for report");
 
     assert!(compare_folders(
         "tests/integ/data/display_of_status_message_in_cm_tables/expected/",
