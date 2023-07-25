@@ -59,32 +59,52 @@ pub enum Error {
     UnequalRowCount(usize, usize),
 }
 
+/// A position inside a table
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct Position {
+    /// row number, starting with zero
     pub row: usize,
+    /// column number, starting with zero
     pub col: usize,
 }
 
 #[derive(Debug, Serialize, Clone)]
+/// Difference of a table entry
 pub enum DiffType {
+    /// Both entries were strings, but had different contents
     UnequalStrings {
+        /// nominal string
         nominal: String,
+        /// actual string
         actual: String,
+        /// position
         position: Position,
     },
+    /// Both entries were [`Quantity`]s but exceeded tolerances
     OutOfTolerance {
+        /// nominal
         nominal: Quantity,
+        /// actual
         actual: Quantity,
+        /// compare mode that was exceeded
         mode: Mode,
+        /// position in table
         position: Position,
     },
+    /// both fields had different value types
     DifferentValueTypes {
+        /// nominal
         nominal: Value,
+        /// actual
         actual: Value,
+        /// position
         position: Position,
     },
+    /// Both fields were headers but with different contents
     UnequalHeader {
+        /// nominal
         nominal: String,
+        /// actual
         actual: String,
     },
 }

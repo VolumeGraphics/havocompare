@@ -103,13 +103,14 @@ fn file_modification_time_out_of_tolerance(
                     result.is_error = true;
                 }
             } else {
-                let msg = format!("Could not calculate duration between modification timestamps");
+                let msg =
+                    "Could not calculate duration between modification timestamps".to_string();
                 error!("{}", &msg);
                 result.push_detail(DiffDetail::Error(msg));
                 result.is_error = true;
             }
         } else {
-            let msg = format!("Could not read file modification timestamps");
+            let msg = "Could not read file modification timestamps".to_string();
             error!("{}", &msg);
             result.push_detail(DiffDetail::Error(msg));
             result.is_error = true;
