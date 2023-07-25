@@ -201,7 +201,7 @@ fn process_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>, rule: &Rule
         Err(e) => {
             let e = e.to_string();
             error!("Problem comparing the files {}", &e);
-            let mut d = Difference::new_for_file(nominal);
+            let mut d = Difference::new_for_file(nominal, actual);
             d.error();
             d.push_detail(DiffDetail::Error(e));
             d

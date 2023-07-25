@@ -53,7 +53,7 @@ pub fn compare_paths<P: AsRef<Path>>(
             nominal_path.as_ref()
         )))?;
     let out_path = (nominal_file_name + "diff_image.png").to_string();
-    let mut result_diff = report::Difference::new_for_file(&nominal_path);
+    let mut result_diff = report::Difference::new_for_file(&nominal_path, &actual_path);
 
     if result.score < config.threshold {
         let color_map = result.image.to_color_map();

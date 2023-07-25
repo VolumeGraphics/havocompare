@@ -64,7 +64,7 @@ pub fn compare_files<P: AsRef<Path>>(
     let nominal = BufReader::new(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?);
 
     let exclusion_list = config.get_ignore_list()?;
-    let mut difference = Difference::new_for_file(nominal_path);
+    let mut difference = Difference::new_for_file(nominal_path, actual_path);
     actual
         .lines()
         .enumerate()

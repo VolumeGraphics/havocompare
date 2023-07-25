@@ -38,7 +38,7 @@ fn regex_matches_any_path(
     let regex = Regex::new(regex)?;
     if regex.is_match(nominal_path) || regex.is_match(actual_path) {
         error!("One of the files ({nominal_path}, {actual_path}) matched the regex {regex}");
-        let mut result = Difference::new_for_file(nominal_path);
+        let mut result = Difference::new_for_file(nominal_path, actual_path);
         result.error();
         result.push_detail(DiffDetail::Properties(MetaDataPropertyDiff::IllegalName));
         result.is_error = true;
@@ -48,7 +48,7 @@ fn regex_matches_any_path(
 }
 
 fn file_size_out_of_tolerance(nominal: &Path, actual: &Path, tolerance: u64) -> Difference {
-    let mut result = Difference::new_for_file(nominal);
+    let mut result = Difference::new_for_file(nominal, actual);
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
         let size_diff =
             (nominal_meta.len() as i128 - actual_meta.len() as i128).unsigned_abs() as u64;
@@ -78,7 +78,7 @@ fn file_modification_time_out_of_tolerance(
     actual: &Path,
     tolerance: u64,
 ) -> Difference {
-    let mut result = Difference::new_for_file(nominal);
+    let mut result = Difference::new_for_file(nominal, actual);
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
         if let (Ok(mod_time_act), Ok(mod_time_nom)) =
             (nominal_meta.modified(), actual_meta.modified())
@@ -142,7 +142,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         .to_string_lossy()
         .to_string();
 
-    let mut total_diff = Difference::new_for_file(nominal);
+    let mut total_diff = Difference::new_for_file(nominal, actual);
     let result = if let Some(name_regex) = config.forbid_name_regex.as_deref() {
         regex_matches_any_path(&compared_file_name_full, &actual_file_name_full, name_regex)?
     } else {

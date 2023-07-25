@@ -18,7 +18,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
     actual: P,
     config: &ExternalConfig,
 ) -> Result<Difference, Error> {
-    let mut diff = Difference::new_for_file(&nominal);
+    let mut diff = Difference::new_for_file(&nominal, &actual);
     let compared_file_name = nominal.as_ref().to_string_lossy().into_owned();
     let output = std::process::Command::new(&config.executable)
         .args(&config.extra_params)

@@ -519,7 +519,8 @@ pub(crate) fn compare_paths(
     });
     let is_error = !results.is_empty();
     let result = report::Difference {
-        file_path: nominal.as_ref().to_path_buf(),
+        nominal_file: nominal.as_ref().to_path_buf(),
+        actual_file: actual.as_ref().to_path_buf(),
         is_error,
         detail: results.into_iter().map(report::DiffDetail::CSV).collect(),
     };

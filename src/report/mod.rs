@@ -30,7 +30,7 @@ pub enum Error {
     #[error("fs_extra crate error {0}")]
     FsExtraFailed(#[from] fs_extra::error::Error),
     #[error("JSON serialization failed {0}")]
-    SerdeError(#[from] serde_json::Error),
+    Serde(#[from] serde_json::Error),
 }
 
 #[derive(Serialize, Debug)]
@@ -89,15 +89,17 @@ pub struct RuleDifferences {
 
 #[derive(Serialize, Debug, Clone, Default)]
 pub struct Difference {
-    pub file_path: PathBuf,
+    pub nominal_file: PathBuf,
+    pub actual_file: PathBuf,
     pub is_error: bool,
     pub detail: Vec<DiffDetail>,
 }
 
 impl Difference {
-    pub fn new_for_file(f: impl AsRef<Path>) -> Self {
+    pub fn new_for_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>) -> Self {
         Self {
-            file_path: f.as_ref().to_path_buf(),
+            nominal_file: nominal.as_ref().to_path_buf(),
+            actual_file: actual.as_ref().to_path_buf(),
             ..Default::default()
         }
     }
@@ -111,7 +113,7 @@ impl Difference {
     }
 
     pub fn join(&mut self, other: Self) -> bool {
-        if self.file_path != other.file_path {
+        if self.nominal_file != other.nominal_file {
             return false;
         }
         self.is_error |= other.is_error;
@@ -130,12 +132,6 @@ pub enum DiffDetail {
     External { stdout: String, stderr: String },
     Properties(MetaDataPropertyDiff),
     Error(String),
-}
-
-impl<T: std::error::Error> From<T> for DiffDetail {
-    fn from(value: T) -> Self {
-        DiffDetail::Error(value.to_string())
-    }
 }
 
 pub fn create_sub_folder() -> Result<DetailPath, Error> {
@@ -602,6 +598,33 @@ pub(crate) fn create_json(
     let writer = report_dir.join("report.json");
     let writer = fat_io_wrap_std(writer, &File::create)?;
     serde_json::to_writer_pretty(writer, &rule_results)?;
+    Ok(())
+}
+
+pub(crate) fn create_html(
+    rule_results: &[RuleDifferences],
+    report_path: impl AsRef<Path>,
+) -> Result<(), Error> {
+    let _reporting_span = span!(tracing::Level::INFO, "JSON Reporting");
+    let _reporting_span = _reporting_span.enter();
+    let report_dir = report_path.as_ref();
+    if report_dir.is_dir() {
+        info!("Delete report folder");
+        fat_io_wrap_std(&report_dir, &fs::remove_dir_all)?;
+    }
+
+    info!("create report folder");
+    fat_io_wrap_std(&report_dir, &fs::create_dir)?;
+
+    for rule_result in rule_results.iter() {
+        let sub_folder = report_dir.join(&rule_result.rule.name);
+        debug!("Create subfolder {:?}", &sub_folder);
+        fat_io_wrap_std(&sub_folder, &fs::create_dir)?;
+        for file in rule_result.diffs.iter() {
+            // for
+        }
+    }
+
     Ok(())
 }
 

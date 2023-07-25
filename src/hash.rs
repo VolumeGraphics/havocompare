@@ -71,7 +71,7 @@ pub fn compare_files<P: AsRef<Path>>(
         .function
         .hash_file(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?)?;
 
-    let mut difference = Difference::new_for_file(nominal_path);
+    let mut difference = Difference::new_for_file(nominal_path, actual_path);
     if act != nom {
         difference.push_detail(DiffDetail::Hash {
             actual: HEXLOWER.encode(&act),

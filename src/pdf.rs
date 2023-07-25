@@ -33,7 +33,7 @@ pub fn compare_files<P: AsRef<Path>>(
     let nominal = extract_text(nominal_path.as_ref())?;
 
     let exclusion_list = config.get_ignore_list()?;
-    let mut difference = Difference::new_for_file(&nominal);
+    let mut difference = Difference::new_for_file(&nominal_path, &actual_path);
     actual
         .lines()
         .enumerate()
