@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::{error, info};
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 pub struct ExternalConfig {
     /// The executable to call - will be started like: `#executable #(#extra_params)* #nominal #actual`
     executable: String,

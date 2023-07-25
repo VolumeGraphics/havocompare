@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::error;
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 /// Image comparison config options
 pub struct ImageCompareConfig {
     /// Threshold for image comparison < 0.5 is very dissimilar, 1.0 is identical

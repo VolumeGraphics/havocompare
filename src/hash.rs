@@ -9,7 +9,7 @@ use thiserror::Error;
 use vg_errortools::fat_io_wrap_std;
 use vg_errortools::FatIOError;
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone, Copy)]
 pub enum HashFunction {
     Sha256,
 }
@@ -43,7 +43,7 @@ impl HashFunction {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// Configuration options for the hash comparison module
 pub struct HashConfig {
     /// Which hash function to use

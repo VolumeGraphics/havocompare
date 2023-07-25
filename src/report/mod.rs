@@ -1,6 +1,7 @@
 mod template;
 
 use crate::csv::{DiffType, Position, Table};
+use crate::Rule;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -53,7 +54,7 @@ pub struct DetailPath {
 
 #[derive(Serialize, Debug)]
 pub(crate) struct RuleResult {
-    pub rule: crate::Rule,
+    pub rule: Rule,
     pub compare_results: Vec<FileCompareResult>,
 }
 
@@ -69,6 +70,31 @@ pub struct CSVReportRow {
     pub columns: Vec<CSVReportColumn>,
     pub has_diff: bool,
     pub has_error: bool,
+}
+
+#[derive(Serialize, Debug, Clone, Default)]
+pub struct Report {
+    pub diffs: Vec<Difference>,
+    pub rules: Vec<Rule>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct Difference {
+    file_path: PathBuf,
+    rule_name: String,
+    is_error: bool,
+    detail: DiffDetail,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum DiffDetail {
+    CSV(DiffType),
+    Image { score: f64, diff_image: PathBuf },
+    Text { line: usize, score: f64 },
+    Hash { actual: String, nominal: String },
+    External { stdout: String, stderr: String },
+    Properties,
 }
 
 pub fn create_sub_folder() -> Result<DetailPath, Error> {

@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use tracing::error;
 
 /// the configuration struct for file property comparison
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 pub struct PropertiesConfig {
     /// Compare the file size, difference must be smaller then given value
     file_size_tolerance_bytes: Option<u64>,

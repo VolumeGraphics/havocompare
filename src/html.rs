@@ -11,7 +11,7 @@ use tracing::error;
 use vg_errortools::fat_io_wrap_std;
 use vg_errortools::FatIOError;
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// Plain text comparison config, also used for PDF
 pub struct HTMLCompareConfig {
     /// Normalized Damerau-Levenshtein distance, 0.0 = bad, 1.0 = identity

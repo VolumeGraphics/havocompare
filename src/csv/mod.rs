@@ -59,14 +59,14 @@ pub enum Error {
     UnequalRowCount(usize, usize),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Position {
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct Position {
     pub row: usize,
     pub col: usize,
 }
 
-#[derive(Debug)]
-pub(crate) enum DiffType {
+#[derive(Debug, Serialize, Clone)]
+pub enum DiffType {
     UnequalStrings {
         nominal: String,
         actual: String,
@@ -209,7 +209,7 @@ impl Mode {
     }
 }
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug, Default)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Default, Clone)]
 /// Settings for the CSV comparison module
 pub struct CSVCompareConfig {
     #[serde(flatten)]

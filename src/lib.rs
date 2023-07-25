@@ -76,7 +76,7 @@ pub enum Error {
     DifferentNumberOfFiles(usize, usize),
 }
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 /// Representing the comparison mode
 pub enum ComparisonMode {
@@ -122,7 +122,7 @@ impl ConfigurationFile {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// Representing a single comparison rule
 pub struct Rule {
     /// The name of the rule - will be displayed in logs

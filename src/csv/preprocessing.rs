@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::Equal;
 use tracing::{debug, warn};
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 /// Preprocessor options
 pub enum Preprocessor {
     /// Try to extract the headers from the first row - fallible if first row contains a number
@@ -237,7 +237,7 @@ mod tests {
             File::open("tests/csv/data/defects_headers.csv").unwrap(),
             &delimiters,
         )
-            .unwrap()
+        .unwrap()
     }
 
     #[test]
