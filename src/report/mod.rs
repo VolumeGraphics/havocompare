@@ -581,20 +581,33 @@ pub fn write_error_detail(
     result
 }
 
-pub(crate) fn create_json(
+pub(crate) fn create_reports(
     rule_results: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let _reporting_span = span!(tracing::Level::INFO, "JSON Reporting");
+    let _reporting_span = span!(tracing::Level::INFO, "Reporting");
     let _reporting_span = _reporting_span.enter();
     let report_dir = report_path.as_ref();
     if report_dir.is_dir() {
         info!("Delete report folder");
         fat_io_wrap_std(&report_dir, &fs::remove_dir_all)?;
     }
-
     info!("create report folder");
     fat_io_wrap_std(&report_dir, &fs::create_dir)?;
+
+    create_json(rule_results, &report_path)?;
+    create_html(rule_results, &report_path)?;
+
+    Ok(())
+}
+
+pub(crate) fn create_json(
+    rule_results: &[RuleDifferences],
+    report_path: impl AsRef<Path>,
+) -> Result<(), Error> {
+    let _reporting_span = span!(tracing::Level::INFO, "JSON");
+    let _reporting_span = _reporting_span.enter();
+    let report_dir = report_path.as_ref();
     let writer = report_dir.join("report.json");
     let writer = fat_io_wrap_std(writer, &File::create)?;
     serde_json::to_writer_pretty(writer, &rule_results)?;
@@ -605,23 +618,27 @@ pub(crate) fn create_html(
     rule_results: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let _reporting_span = span!(tracing::Level::INFO, "JSON Reporting");
+    let _reporting_span = span!(tracing::Level::INFO, "HTML");
     let _reporting_span = _reporting_span.enter();
     let report_dir = report_path.as_ref();
-    if report_dir.is_dir() {
-        info!("Delete report folder");
-        fat_io_wrap_std(&report_dir, &fs::remove_dir_all)?;
-    }
-
-    info!("create report folder");
-    fat_io_wrap_std(&report_dir, &fs::create_dir)?;
 
     for rule_result in rule_results.iter() {
         let sub_folder = report_dir.join(&rule_result.rule.name);
         debug!("Create subfolder {:?}", &sub_folder);
         fat_io_wrap_std(&sub_folder, &fs::create_dir)?;
         for file in rule_result.diffs.iter() {
-            // for
+            let cmp_errors: Vec<&DiffDetail> = file
+                .detail
+                .iter()
+                .filter(|r| !matches!(r, DiffDetail::Error(_)))
+                .collect();
+            let diffs: Vec<&DiffDetail> = file
+                .detail
+                .iter()
+                .filter(|r| matches!(r, DiffDetail::Error(_)))
+                .collect();
+            // TODO: Write cmp_errors to report
+            // TODO: Write diffs to report
         }
     }
 

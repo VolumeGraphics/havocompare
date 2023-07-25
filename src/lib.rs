@@ -322,7 +322,7 @@ pub fn compare_folders_cfg(
         .collect();
 
     let all_okay = results.iter().all(|result| *result);
-    report::create_json(&rule_results, report_path)?;
+    report::create_reports(&rule_results, &report_path)?;
     Ok(all_okay)
 }
 
