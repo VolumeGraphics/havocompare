@@ -223,6 +223,10 @@ rules:
 
 ## Changelog
 
+### 0.4.0
+- Separate reporting logic from comparison logic
+- Implement a machine-readable JSON reporting
+
 ### 0.3.2
 - Allow direct opening of reports after comparison with `--open`
 - Parsing failures when running `compare` are now propagated to terminal
