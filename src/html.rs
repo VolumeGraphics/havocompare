@@ -116,8 +116,6 @@ mod test {
         let result = compare_files(actual, nominal, &HTMLCompareConfig::default()).unwrap();
 
         assert!(result.is_error);
-
-        assert!(result.detail_path.is_some());
     }
 
     #[test]

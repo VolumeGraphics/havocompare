@@ -176,12 +176,13 @@ mod tests {
         assert!(
             regex_matches_any_path(file_name_mock, file_name_cap_mock, regex_no_capitals)
                 .unwrap()
+                .unwrap()
                 .is_error
         );
         assert!(
-            !regex_matches_any_path(file_name_mock, file_name_cap_mock, regex_no_spaces)
+            regex_matches_any_path(file_name_mock, file_name_cap_mock, regex_no_spaces)
                 .unwrap()
-                .is_error
+                .is_none()
         );
     }
 

@@ -78,6 +78,7 @@ pub fn compare_paths<P: AsRef<Path>>(
 #[cfg(test)]
 mod test {
     use crate::image::{compare_paths, ImageCompareConfig};
+    use crate::report::DiffDetail;
 
     #[test]
     fn identity() {
@@ -99,21 +100,20 @@ mod test {
         )
         .unwrap();
         assert!(result.is_error);
-        assert!(result.detail_path.is_some());
-        let img = image::open(
-            result
-                .detail_path
+        if let DiffDetail::Image {
+            score: _,
+            diff_image,
+        } = result.detail.first().unwrap()
+        {
+            let img = image::open(diff_image).unwrap().into_rgb8();
+            let nom = image::open("tests/integ/data/images/diff_100_DPI.png")
                 .unwrap()
-                .temp_path
-                .join("SaveImage_100DPI_default_size.jpgdiff_image.png"),
-        )
-        .expect("Could not load generated diff image")
-        .into_rgb8();
-        let nom = image::open("tests/integ/data/images/diff_100_DPI.png")
-            .unwrap()
-            .into_rgb8();
-        let diff_result = image_compare::rgb_hybrid_compare(&img, &nom)
-            .expect("Wrong dimensions of diff images!");
-        assert_eq!(diff_result.score, 1.0);
+                .into_rgb8();
+            let diff_result = image_compare::rgb_hybrid_compare(&img, &nom)
+                .expect("Wrong dimensions of diff images!");
+            assert_eq!(diff_result.score, 1.0);
+        } else {
+            unreachable!();
+        }
     }
 }
