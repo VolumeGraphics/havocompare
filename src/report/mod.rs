@@ -1,8 +1,9 @@
 mod template;
 
-use crate::csv::{DiffType, Position, Table};
+use crate::csv::{Delimiters, DiffType, Position, Table};
 use crate::properties::MetaDataPropertyDiff;
-use crate::Rule;
+use crate::{ComparisonMode, Rule};
+use pdf_extract::extract_text;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -31,34 +32,23 @@ pub enum Error {
     FsExtraFailed(#[from] fs_extra::error::Error),
     #[error("JSON serialization failed {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("CSV failed {0}")]
+    Csv(#[from] crate::csv::Error),
+    #[error("PDF Extract failed {0}")]
+    PdfExtract(#[from] pdf_extract::OutputError),
 }
 
-#[derive(Serialize, Debug)]
-pub struct FileCompareResult {
-    pub compared_file_name: String,
-    pub is_error: bool,
-    pub detail_path: Option<DetailPath>,
-    pub additional_columns: Vec<AdditionalOverviewColumn>,
-}
-
-#[derive(Serialize, Debug, Default)]
+#[derive(Serialize, Debug, Default, Clone)]
 pub struct AdditionalOverviewColumn {
     pub nominal_value: String,
     pub actual_value: String,
     pub is_error: bool,
-    pub diff_value: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct DetailPath {
-    pub temp_path: PathBuf,
-    pub path_name: String,
-}
-
-#[derive(Serialize, Debug)]
-pub(crate) struct RuleResult {
-    pub rule: Rule,
-    pub compare_results: Vec<FileCompareResult>,
+    pub path: PathBuf,
+    pub name: String,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -71,14 +61,8 @@ pub struct CSVReportColumn {
 #[derive(Serialize, Debug, Clone)]
 pub struct CSVReportRow {
     pub columns: Vec<CSVReportColumn>,
-    pub has_diff: bool,
-    pub has_error: bool,
-}
-
-#[derive(Serialize, Debug, Clone, Default)]
-pub struct Report {
-    pub diffs: Vec<Difference>,
-    pub rules: Vec<Rule>,
+    pub has_diff: bool,  //tolerable error
+    pub has_error: bool, //intolerable error
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -87,17 +71,35 @@ pub struct RuleDifferences {
     pub diffs: Vec<Difference>,
 }
 
+#[derive(Serialize, Debug, Clone)]
+pub struct RenderToHtmlRuleDifferences {
+    pub rule: Rule,
+    pub diffs: Vec<RenderToHtmlDifference>,
+}
+
 #[derive(Serialize, Debug, Clone, Default)]
 pub struct Difference {
     pub nominal_file: PathBuf,
     pub actual_file: PathBuf,
+    pub relative_file_path: String,
     pub is_error: bool,
     pub detail: Vec<DiffDetail>,
+}
+
+#[derive(Serialize, Debug, Clone, Default)]
+pub struct RenderToHtmlDifference {
+    #[serde(flatten)]
+    pub diff: Difference,
+    pub detail_path: Option<DetailPath>,
+    pub additional_columns: Vec<AdditionalOverviewColumn>,
 }
 
 impl Difference {
     pub fn new_for_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>) -> Self {
         Self {
+            relative_file_path: get_relative_path(actual.as_ref(), nominal.as_ref())
+                .to_string_lossy()
+                .to_string(),
             nominal_file: nominal.as_ref().to_path_buf(),
             actual_file: actual.as_ref().to_path_buf(),
             ..Default::default()
@@ -134,10 +136,10 @@ pub enum DiffDetail {
     Error(String),
 }
 
-pub fn create_sub_folder() -> Result<DetailPath, Error> {
+pub fn create_detail_folder(report_dir: impl AsRef<Path>) -> Result<DetailPath, Error> {
     let temp_path = tempfile::Builder::new()
         .prefix("havocompare-")
-        .tempdir()?
+        .tempdir_in(report_dir.as_ref())?
         .into_path();
 
     let path_name = temp_path
@@ -152,8 +154,8 @@ pub fn create_sub_folder() -> Result<DetailPath, Error> {
         .to_string();
 
     Ok(DetailPath {
-        temp_path,
-        path_name,
+        path: temp_path,
+        name: path_name,
     })
 }
 
@@ -161,23 +163,15 @@ pub fn write_html_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[String],
-) -> Result<FileCompareResult, Error> {
-    let mut result = FileCompareResult {
-        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
-            .to_string_lossy()
-            .to_string(),
-        is_error: false,
-        detail_path: None,
-        additional_columns: vec![],
-    };
-
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
     if diffs.is_empty() {
-        return Ok(result);
+        return Ok(None);
     }
 
-    let sub_folder = create_sub_folder()?;
+    let detail_path = create_detail_folder(report_dir.as_ref())?;
 
-    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -197,34 +191,24 @@ pub fn write_html_detail(
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
-    result.is_error = true;
-    result.detail_path = Some(sub_folder);
-
-    Ok(result)
+    Ok(Some(detail_path))
 }
 
 pub(crate) fn write_csv_detail(
-    nominal_table: Table,
-    actual_table: Table,
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    diffs: &[DiffType],
-) -> Result<FileCompareResult, Error> {
-    let mut result = FileCompareResult {
-        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
-            .to_string_lossy()
-            .to_string(),
-        is_error: false,
-        detail_path: None,
-        additional_columns: vec![],
-    };
-
+    diffs: &[&DiffType],
+    config: &Delimiters,
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
     let mut headers: CSVReportRow = CSVReportRow {
         columns: vec![],
         has_diff: false,
         has_error: false,
     };
 
+    let nominal_table = Table::from_reader(File::open(nominal.as_ref())?, config)?;
+    let actual_table = Table::from_reader(File::open(actual.as_ref())?, config)?;
     nominal_table
         .columns
         .iter()
@@ -313,9 +297,9 @@ pub(crate) fn write_csv_detail(
         })
         .collect();
 
-    let sub_folder = create_sub_folder()?;
+    let detail_path = create_detail_folder(report_dir)?;
 
-    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -334,33 +318,23 @@ pub(crate) fn write_csv_detail(
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
-    result.is_error = !diffs.is_empty();
-    result.detail_path = Some(sub_folder);
-
-    Ok(result)
+    Ok(Some(detail_path))
 }
 
 pub fn write_image_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    diffs: &[String],
-) -> Result<FileCompareResult, Error> {
-    let mut result = FileCompareResult {
-        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
-            .to_string_lossy()
-            .to_string(),
-        is_error: false,
-        detail_path: None,
-        additional_columns: vec![],
-    };
-
+    diffs: &[(&f64, &String)],
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
+    //TODO: fix this
     if diffs.is_empty() {
-        return Ok(result);
+        return Ok(None);
     }
 
-    let sub_folder = create_sub_folder()?;
+    let detail_path = create_detail_folder(report_dir.as_ref())?;
 
-    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -386,17 +360,17 @@ pub fn write_image_detail(
     let actual_image = format!("actual_image_{}", get_file_name(actual.as_ref())?);
     let nominal_image = format!("nominal_image_.{}", get_file_name(nominal.as_ref())?);
 
-    fs::copy(actual.as_ref(), sub_folder.temp_path.join(&actual_image))
+    fs::copy(actual.as_ref(), detail_path.path.join(&actual_image))
         .map_err(|e| FatIOError::from_std_io_err(e, actual.as_ref().to_path_buf()))?;
-    fs::copy(nominal.as_ref(), sub_folder.temp_path.join(&nominal_image))
+    fs::copy(nominal.as_ref(), detail_path.path.join(&nominal_image))
         .map_err(|e| FatIOError::from_std_io_err(e, nominal.as_ref().to_path_buf()))?;
 
-    let diff_image = &diffs[1];
-    let img_target = sub_folder.temp_path.join(diff_image);
+    let (score, diff_image) = diffs[0];
+    let img_target = detail_path.path.join(diff_image);
     fs::copy(diff_image, &img_target)
         .map_err(|e| FatIOError::from_std_io_err(e, img_target.to_path_buf()))?;
 
-    ctx.insert("error", &diffs[0]);
+    ctx.insert("error", score); //TODO: rename this correctly
     ctx.insert("diff_image", diff_image);
     ctx.insert("actual_image", &actual_image);
     ctx.insert("nominal_image", &nominal_image);
@@ -406,43 +380,33 @@ pub fn write_image_detail(
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
-    result.is_error = true;
-    result.detail_path = Some(sub_folder);
-
-    Ok(result)
+    Ok(Some(detail_path))
 }
 
 pub fn write_pdf_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    nominal_string: &String,
-    actual_string: &String,
-    diffs: &[(usize, String)],
-) -> Result<FileCompareResult, Error> {
-    let mut result = FileCompareResult {
-        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
-            .to_string_lossy()
-            .to_string(),
-        is_error: false,
-        detail_path: None,
-        additional_columns: vec![],
-    };
+    diffs: &[(&usize, &f64)],
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
+    let detail_path = create_detail_folder(report_dir.as_ref())?;
 
-    let sub_folder = create_sub_folder()?;
+    let nominal_string = extract_text(nominal.as_ref())?;
+    let actual_string = extract_text(actual.as_ref())?;
 
     let nominal_extracted_filename = "nominal_extracted_text.txt";
     let actual_extracted_filename = "actual_extracted_text.txt";
 
-    let nominal_extracted_file = sub_folder.temp_path.join(nominal_extracted_filename);
+    let nominal_extracted_file = detail_path.path.join(nominal_extracted_filename);
     fs::write(&nominal_extracted_file, nominal_string.as_bytes())
         .map_err(|e| FatIOError::from_std_io_err(e, nominal_extracted_file))?;
 
-    let actual_extracted_file = sub_folder.temp_path.join(actual_extracted_filename);
+    let actual_extracted_file = detail_path.path.join(actual_extracted_filename);
     fs::write(&actual_extracted_file, actual_string.as_bytes())
         .map_err(|e| FatIOError::from_std_io_err(e, actual_extracted_file))?;
     info!("Extracted text written to files");
 
-    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -461,8 +425,11 @@ pub fn write_pdf_detail(
                 diffs: vec![],
             };
 
-            if let Some(diff) = diffs.iter().find(|(i, _msg)| *i == l) {
-                result.diffs.push(diff.1.clone());
+            if let Some(diff) = diffs.iter().find(|(i, t)| **i == l) {
+                result.diffs.push(format!(
+                    "Missmatch in line {}, threshold: {}",
+                    diff.0, diff.1
+                ));
             };
 
             result
@@ -472,7 +439,6 @@ pub fn write_pdf_detail(
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
-    ctx.insert("diffs", &diffs);
     ctx.insert("combined_lines", &combined_lines);
     ctx.insert("nominal_extracted_filename", nominal_extracted_filename);
     ctx.insert("actual_extracted_filename", actual_extracted_filename);
@@ -483,31 +449,19 @@ pub fn write_pdf_detail(
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
-    result.is_error = !diffs.is_empty();
-    result.detail_path = Some(sub_folder);
-
-    Ok(result)
+    Ok(Some(detail_path))
 }
 
 pub fn write_external_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    is_error: bool,
     stdout: &str,
     stderr: &str,
     message: &str,
-) -> Result<FileCompareResult, Error> {
-    let mut result = FileCompareResult {
-        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
-            .to_string_lossy()
-            .to_string(),
-        is_error,
-        detail_path: None,
-        additional_columns: vec![],
-    };
-
-    let sub_folder = create_sub_folder()?;
-    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
+    let detail_path = create_detail_folder(report_dir.as_ref())?;
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -527,18 +481,17 @@ pub fn write_external_detail(
 
     tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
 
-    result.detail_path = Some(sub_folder);
-
-    Ok(result)
+    Ok(Some(detail_path))
 }
 
 fn create_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     error: Box<dyn std::error::Error>,
+    report_dir: impl AsRef<Path>,
 ) -> Result<DetailPath, Error> {
-    let sub_folder = create_sub_folder()?;
-    let detail_file = sub_folder.temp_path.join(template::DETAIL_FILENAME);
+    let sub_folder = create_detail_folder(report_dir.as_ref())?;
+    let detail_file = sub_folder.path.join(template::DETAIL_FILENAME);
 
     let mut tera = Tera::default();
     tera.add_raw_template(
@@ -562,17 +515,15 @@ pub fn write_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     error: Box<dyn std::error::Error>,
-) -> FileCompareResult {
-    let mut result = FileCompareResult {
-        compared_file_name: get_relative_path(actual.as_ref(), nominal.as_ref())
-            .to_string_lossy()
-            .to_string(),
-        is_error: true,
+    report_dir: impl AsRef<Path>,
+) -> RenderToHtmlDifference {
+    let mut result = RenderToHtmlDifference {
+        diff: Default::default(),
         detail_path: None,
         additional_columns: vec![],
     };
 
-    if let Ok(sub_folder) = create_error_detail(nominal, actual, error) {
+    if let Ok(sub_folder) = create_error_detail(nominal, actual, error, report_dir) {
         result.detail_path = Some(sub_folder);
     } else {
         error!("Could not create error detail");
@@ -582,7 +533,7 @@ pub fn write_error_detail(
 }
 
 pub(crate) fn create_reports(
-    rule_results: &[RuleDifferences],
+    rule_differences: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let _reporting_span = span!(tracing::Level::INFO, "Reporting");
@@ -595,14 +546,14 @@ pub(crate) fn create_reports(
     info!("create report folder");
     fat_io_wrap_std(&report_dir, &fs::create_dir)?;
 
-    create_json(rule_results, &report_path)?;
-    create_html(rule_results, &report_path)?;
+    create_json(rule_differences, &report_path)?;
+    create_html(rule_differences, &report_path)?;
 
     Ok(())
 }
 
 pub(crate) fn create_json(
-    rule_results: &[RuleDifferences],
+    rule_differences: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let _reporting_span = span!(tracing::Level::INFO, "JSON");
@@ -610,80 +561,227 @@ pub(crate) fn create_json(
     let report_dir = report_path.as_ref();
     let writer = report_dir.join("report.json");
     let writer = fat_io_wrap_std(writer, &File::create)?;
-    serde_json::to_writer_pretty(writer, &rule_results)?;
+    serde_json::to_writer_pretty(writer, &rule_differences)?;
     Ok(())
 }
 
 pub(crate) fn create_html(
-    rule_results: &[RuleDifferences],
+    rule_differences: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
     let _reporting_span = span!(tracing::Level::INFO, "HTML");
     let _reporting_span = _reporting_span.enter();
     let report_dir = report_path.as_ref();
 
-    for rule_result in rule_results.iter() {
-        let sub_folder = report_dir.join(&rule_result.rule.name);
+    let mut html_rule_differences: Vec<RenderToHtmlRuleDifferences> = Vec::new();
+    for rule_difference in rule_differences.iter() {
+        let sub_folder = report_dir.join(&rule_difference.rule.name);
         debug!("Create subfolder {:?}", &sub_folder);
         fat_io_wrap_std(&sub_folder, &fs::create_dir)?;
-        for file in rule_result.diffs.iter() {
-            let cmp_errors: Vec<&DiffDetail> = file
-                .detail
-                .iter()
-                .filter(|r| !matches!(r, DiffDetail::Error(_)))
-                .collect();
-            let diffs: Vec<&DiffDetail> = file
-                .detail
-                .iter()
-                .filter(|r| matches!(r, DiffDetail::Error(_)))
-                .collect();
-            // TODO: Write cmp_errors to report
-            // TODO: Write diffs to report
-        }
+
+        let render_diffs: Vec<_> = rule_difference
+            .diffs
+            .iter()
+            .map(|file| {
+                // let cmp_errors: Vec<&DiffDetail> = file
+                //     .detail
+                //     .iter()
+                //     .filter(|r| !matches!(r, DiffDetail::Error(_)))
+                //     .collect();
+
+                // let diffs: Vec<&DiffDetail> = file
+                //     .detail
+                //     .iter()
+                //     .filter(|r| matches!(r, DiffDetail::Error(_)))
+                //     .collect();
+
+                // TODO: Write cmp_errors to report
+                // TODO: Write diffs to report -> this is crate error?
+
+                //TODO: each type needs its own detail.html and how it should be displayed in index.html (which columns etc)
+                //TODO: use Unwrap_or_else display error in report + console
+                let detail_path = match &rule_difference.rule.file_type {
+                    ComparisonMode::CSV(config) => {
+                        let diffs: Vec<&DiffType> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::CSV(d) => Some(d),
+                                _ => None,
+                            })
+                            .collect();
+
+                        write_csv_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &diffs,
+                            &config.delimiters,
+                            &sub_folder,
+                        )
+                        .unwrap_or_default()
+                    }
+                    ComparisonMode::PlainText(_) => {
+                        let diffs: Vec<String> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::Text { line, score } => {
+                                    Some(format!("{} {}", line, score)) //TODO: want the text difference
+                                }
+                                _ => None,
+                            })
+                            .collect();
+
+                        write_html_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &diffs,
+                            &sub_folder,
+                        )
+                        .unwrap_or_default()
+                    }
+                    ComparisonMode::PDFText(_) => {
+                        let diffs: Vec<(&usize, &f64)> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::Text { line, score } => {
+                                    //TODO: displayed line should be + 1
+                                    Some((line, score)) //TODO: want the text difference
+                                }
+                                _ => None,
+                            })
+                            .collect();
+
+                        write_pdf_detail(&file.nominal_file, &file.actual_file, &diffs, &sub_folder)
+                            .unwrap_or_default()
+                    }
+                    ComparisonMode::Image(_) => {
+                        let diffs: Vec<(&f64, &String)> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::Image { score, diff_image } => {
+                                    Some((score, diff_image))
+                                }
+                                _ => None,
+                            })
+                            .collect();
+
+                        // write_pdf_detail(&file.nominal_file, &file.actual_file, &diffs, &sub_folder)
+                        //     .unwrap_or_default()
+                        write_image_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &diffs, //TODO: should actually only 1 image per file compare
+                            &sub_folder,
+                        )
+                        .unwrap_or_default()
+                    }
+                    ComparisonMode::External(_) => {
+                        if let Some((stdout, stderr)) = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::External { stdout, stderr } => Some((stdout, stderr)),
+                                _ => None,
+                            })
+                            .next()
+                        {
+                            write_external_detail(
+                                &file.nominal_file,
+                                &file.actual_file,
+                                stdout,
+                                stderr,
+                                "", //TODO: this is DiffDetail::Error
+                                &sub_folder,
+                            )
+                            .unwrap_or_default()
+                        } else {
+                            None
+                        }
+                    }
+                    ComparisonMode::FileProperties(_) => None, //TODO: we need only additional columns in the index.html
+                    ComparisonMode::Hash(_) => {
+                        let diffs: Vec<String> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::Hash { actual, nominal } => Some(format!(
+                                    "Nominal file's hash is '{}' actual is '{}'",
+                                    nominal, actual
+                                )),
+                                _ => None,
+                            })
+                            .collect();
+
+                        write_html_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &diffs,
+                            &sub_folder,
+                        )
+                        .unwrap_or_default()
+                    }
+                };
+
+                let additional_columns: Vec<AdditionalOverviewColumn> =
+                    match &rule_difference.rule.file_type {
+                        ComparisonMode::FileProperties(_) => {
+                            let mut additional_columns: Vec<AdditionalOverviewColumn> = Vec::new();
+
+                            let diffs: Vec<&MetaDataPropertyDiff> = file
+                                .detail
+                                .iter()
+                                .filter_map(|r| match r {
+                                    DiffDetail::Properties(diff) => Some(diff),
+                                    _ => None,
+                                })
+                                .collect();
+
+                            let result: AdditionalOverviewColumn = if let Some(_) = diffs
+                                .iter()
+                                .find(|d| matches!(d, MetaDataPropertyDiff::IllegalName))
+                            {
+                                AdditionalOverviewColumn {
+                                    nominal_value: file.nominal_file.to_string_lossy().to_string(),
+                                    actual_value: file.actual_file.to_string_lossy().to_string(),
+                                    is_error: true,
+                                }
+                            } else {
+                                Default::default()
+                            };
+                            additional_columns.push(result);
+
+                            //TODO:
+
+                            additional_columns
+                        }
+                        _ => Vec::new(),
+                    };
+
+                RenderToHtmlDifference {
+                    diff: file.clone(),
+                    detail_path,
+                    additional_columns,
+                }
+            })
+            .collect();
+
+        html_rule_differences.push(RenderToHtmlRuleDifferences {
+            rule: rule_difference.rule.clone(),
+            diffs: render_diffs,
+        });
     }
+
+    write_index(report_dir, &html_rule_differences)?;
 
     Ok(())
 }
 
-pub(crate) fn create(
-    rule_results: &[RuleResult],
-    report_path: impl AsRef<Path>,
-) -> Result<(), Error> {
-    let _reporting_span = span!(tracing::Level::INFO, "Reporting");
-    let _reporting_span = _reporting_span.enter();
-    let report_dir = report_path.as_ref();
-    if report_dir.is_dir() {
-        info!("Delete report folder");
-        fat_io_wrap_std(&report_dir, &fs::remove_dir_all)?;
-    }
-
-    info!("create report folder");
-    fat_io_wrap_std(&report_dir, &fs::create_dir)?;
-
-    //move folders
-    for rule_result in rule_results.iter() {
-        let sub_folder = report_dir.join(&rule_result.rule.name);
-        debug!("Create subfolder {:?}", &sub_folder);
-        fat_io_wrap_std(&sub_folder, &fs::create_dir)?;
-        for file_result in rule_result.compare_results.iter() {
-            if let Some(detail_path) = &file_result.detail_path {
-                debug!(
-                    "moving subfolder {:?} to {:?}",
-                    &detail_path.temp_path, &sub_folder
-                );
-
-                let options = fs_extra::dir::CopyOptions::new();
-                fs_extra::dir::copy(&detail_path.temp_path, &sub_folder, &options)?;
-            }
-        }
-    }
-
-    write_index(report_dir, rule_results)
-}
-
 pub(crate) fn write_index(
     report_dir: impl AsRef<Path>,
-    rule_results: &[RuleResult],
+    rule_results: &[RenderToHtmlRuleDifferences],
 ) -> Result<(), Error> {
     let index_file = report_dir.as_ref().join(template::INDEX_FILENAME);
 
@@ -774,8 +872,8 @@ mod tests {
 
     #[test]
     fn test_create_sub_folder() {
-        let sub_folder = create_sub_folder().unwrap();
-        assert!(sub_folder.temp_path.is_dir());
-        assert!(!sub_folder.path_name.is_empty());
+        let sub_folder = create_detail_folder().unwrap();
+        assert!(sub_folder.path.is_dir());
+        assert!(!sub_folder.name.is_empty());
     }
 }

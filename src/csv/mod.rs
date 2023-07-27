@@ -32,9 +32,6 @@ pub enum Error {
     #[error("Failed to compile regex {0}")]
     /// Regex compilation failed
     RegexCompilationFailed(#[from] regex::Error),
-    #[error("Problem creating csv report {0}")]
-    /// Reporting could not be created
-    ReportingFailed(#[from] report::Error),
     #[error("File access failed {0}")]
     /// File access failed
     FileAccessFailed(#[from] FatIOError),
@@ -518,12 +515,9 @@ pub(crate) fn compare_paths(
         error!("{}", &error);
     });
     let is_error = !results.is_empty();
-    let result = report::Difference {
-        nominal_file: nominal.as_ref().to_path_buf(),
-        actual_file: actual.as_ref().to_path_buf(),
-        is_error,
-        detail: results.into_iter().map(report::DiffDetail::CSV).collect(),
-    };
+    let mut result = report::Difference::new_for_file(nominal.as_ref(), actual.as_ref());
+    result.is_error = is_error;
+    result.detail = results.into_iter().map(report::DiffDetail::CSV).collect();
     Ok(result)
 }
 
