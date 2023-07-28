@@ -73,11 +73,11 @@ pub const INDEX_TEMPLATE: &str = r###"
 		{% endif %}
 		</thead>
 		<tbody>
-			{% for file in rule_report.compare_results %}
+			{% for file in rule_report.diffs %}
 				<tr {% if file.is_error %} class="error" {% endif %}>
 					{% if rule_report.rule.FileProperties %}
 						<td {% if file.additional_columns.0.is_error %} class="text-error" {% endif %}>
-							{{ file.compared_file_name }}
+							{{ file.relative_file_path }}
 						</td>
 						<td {% if file.additional_columns.1.is_error %} class="text-error" {% endif %}>
 							{{ file.additional_columns.1.nominal_value }}
@@ -95,9 +95,9 @@ pub const INDEX_TEMPLATE: &str = r###"
 					{% else %}
 							<td>
 								{% if file.detail_path %}
-									<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.compared_file_name }}</a>
+									<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.relative_file_path }}</a>
 								{% else %}
-									{{ file.compared_file_name }}
+									{{ file.relative_file_path }}
 								{% endif %}
 							</td>
 							<td>{% if file.is_error %} <span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span> {% endif %}</td>

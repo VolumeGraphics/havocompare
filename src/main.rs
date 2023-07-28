@@ -1,7 +1,7 @@
-use std::path::Path;
 use anyhow::anyhow;
 use clap::Parser;
 use havocompare::{compare_folders, get_schema, validate_config};
+use std::path::Path;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -22,7 +22,7 @@ enum Commands {
         report_config: String,
         /// Open the report immediately after comparison
         #[arg(short, long)]
-        open: bool
+        open: bool,
     },
 
     /// Export the JsonSchema for the config files
@@ -71,11 +71,10 @@ fn main() -> Result<(), vg_errortools::MainError> {
             nominal,
             actual,
             report_config,
-            open
+            open,
         } => {
             let report_path = Path::new(report_config.as_str());
-            let result =
-                compare_folders(nominal, actual, compare_config, report_path)?;
+            let result = compare_folders(nominal, actual, compare_config, report_path)?;
             if open {
                 info!("Opening report");
                 opener::open(report_path.join("index.html")).expect("Could not open report!");

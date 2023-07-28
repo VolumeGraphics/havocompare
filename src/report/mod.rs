@@ -327,7 +327,6 @@ pub fn write_image_detail(
     diffs: &[(&f64, &String)],
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
-    //TODO: fix this
     if diffs.is_empty() {
         return Ok(None);
     }
@@ -583,22 +582,14 @@ pub(crate) fn create_html(
             .diffs
             .iter()
             .map(|file| {
-                // let cmp_errors: Vec<&DiffDetail> = file
-                //     .detail
-                //     .iter()
-                //     .filter(|r| !matches!(r, DiffDetail::Error(_)))
-                //     .collect();
-
                 // let diffs: Vec<&DiffDetail> = file
                 //     .detail
                 //     .iter()
                 //     .filter(|r| matches!(r, DiffDetail::Error(_)))
                 //     .collect();
 
-                // TODO: Write cmp_errors to report
                 // TODO: Write diffs to report -> this is crate error?
 
-                //TODO: each type needs its own detail.html and how it should be displayed in index.html (which columns etc)
                 //TODO: use Unwrap_or_else display error in report + console
                 let detail_path = match &rule_difference.rule.file_type {
                     ComparisonMode::CSV(config) => {
@@ -668,12 +659,10 @@ pub(crate) fn create_html(
                             })
                             .collect();
 
-                        // write_pdf_detail(&file.nominal_file, &file.actual_file, &diffs, &sub_folder)
-                        //     .unwrap_or_default()
                         write_image_detail(
                             &file.nominal_file,
                             &file.actual_file,
-                            &diffs, //TODO: should actually only 1 image per file compare
+                            &diffs, //should actually only 1 image per file compare
                             &sub_folder,
                         )
                         .unwrap_or_default()
@@ -701,7 +690,7 @@ pub(crate) fn create_html(
                             None
                         }
                     }
-                    ComparisonMode::FileProperties(_) => None, //TODO: we need only additional columns in the index.html
+                    ComparisonMode::FileProperties(_) => None, //we need only additional columns in the index.html
                     ComparisonMode::Hash(_) => {
                         let diffs: Vec<String> = file
                             .detail
@@ -739,9 +728,9 @@ pub(crate) fn create_html(
                                 })
                                 .collect();
 
-                            let result: AdditionalOverviewColumn = if let Some(_) = diffs
+                            let result: AdditionalOverviewColumn = if diffs
                                 .iter()
-                                .find(|d| matches!(d, MetaDataPropertyDiff::IllegalName))
+                                .any(|d| matches!(d, MetaDataPropertyDiff::IllegalName))
                             {
                                 AdditionalOverviewColumn {
                                     nominal_value: file.nominal_file.to_string_lossy().to_string(),
@@ -753,7 +742,37 @@ pub(crate) fn create_html(
                             };
                             additional_columns.push(result);
 
-                            //TODO:
+                            let result: AdditionalOverviewColumn =
+                                if let Some(MetaDataPropertyDiff::Size { nominal, actual }) = diffs
+                                    .iter()
+                                    .find(|d| matches!(d, MetaDataPropertyDiff::Size { .. }))
+                                {
+                                    AdditionalOverviewColumn {
+                                        nominal_value: format!("{nominal}"),
+                                        actual_value: format!("{actual}"),
+                                        is_error: true,
+                                    }
+                                } else {
+                                    Default::default()
+                                };
+                            additional_columns.push(result);
+
+                            let result: AdditionalOverviewColumn =
+                                if let Some(MetaDataPropertyDiff::CreationDate {
+                                    nominal,
+                                    actual,
+                                }) = diffs.iter().find(|d| {
+                                    matches!(d, MetaDataPropertyDiff::CreationDate { .. })
+                                }) {
+                                    AdditionalOverviewColumn {
+                                        nominal_value: nominal.clone(),
+                                        actual_value: actual.clone(),
+                                        is_error: true,
+                                    }
+                                } else {
+                                    Default::default()
+                                };
+                            additional_columns.push(result);
 
                             additional_columns
                         }
@@ -872,7 +891,8 @@ mod tests {
 
     #[test]
     fn test_create_sub_folder() {
-        let sub_folder = create_detail_folder().unwrap();
+        let report_dir = tempfile::tempdir().unwrap();
+        let sub_folder = create_detail_folder(&report_dir).unwrap();
         assert!(sub_folder.path.is_dir());
         assert!(!sub_folder.name.is_empty());
     }
