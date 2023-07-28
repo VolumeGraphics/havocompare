@@ -95,7 +95,7 @@ pub const INDEX_TEMPLATE: &str = r###"
 					{% else %}
 							<td>
 								{% if file.detail_path %}
-									<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.path_name }}/{{ detail_filename }}">{{ file.relative_file_path }}</a>
+									<a href="./{{ rule_report.rule.name }}/{{ file.detail_path.name }}/{{ detail_filename }}">{{ file.relative_file_path }}</a>
 								{% else %}
 									{{ file.relative_file_path }}
 								{% endif %}

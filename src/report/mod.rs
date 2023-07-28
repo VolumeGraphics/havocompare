@@ -128,10 +128,24 @@ impl Difference {
 #[allow(clippy::upper_case_acronyms)]
 pub enum DiffDetail {
     CSV(DiffType),
-    Image { score: f64, diff_image: String },
-    Text { line: usize, score: f64 },
-    Hash { actual: String, nominal: String },
-    External { stdout: String, stderr: String },
+    Image {
+        score: f64,
+        diff_image: String,
+    },
+    Text {
+        actual: String,
+        nominal: String,
+        line: usize,
+        score: f64,
+    },
+    Hash {
+        actual: String,
+        nominal: String,
+    },
+    External {
+        stdout: String,
+        stderr: String,
+    },
     Properties(MetaDataPropertyDiff),
     Error(String),
 }
@@ -369,7 +383,7 @@ pub fn write_image_detail(
     fs::copy(diff_image, &img_target)
         .map_err(|e| FatIOError::from_std_io_err(e, img_target.to_path_buf()))?;
 
-    ctx.insert("error", score); //TODO: rename this correctly
+    ctx.insert("error", &format!("Score {score}"));
     ctx.insert("diff_image", diff_image);
     ctx.insert("actual_image", &actual_image);
     ctx.insert("nominal_image", &nominal_image);
@@ -385,7 +399,7 @@ pub fn write_image_detail(
 pub fn write_pdf_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    diffs: &[(&usize, &f64)],
+    diffs: &[(&usize, String)],
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
     let detail_path = create_detail_folder(report_dir.as_ref())?;
@@ -424,11 +438,8 @@ pub fn write_pdf_detail(
                 diffs: vec![],
             };
 
-            if let Some(diff) = diffs.iter().find(|(i, t)| **i == l) {
-                result.diffs.push(format!(
-                    "Missmatch in line {}, threshold: {}",
-                    diff.0, diff.1
-                ));
+            if let Some(diff) = diffs.iter().find(|(i, _msg)| **i == l) {
+                result.diffs.push(diff.1.clone());
             };
 
             result
@@ -616,9 +627,15 @@ pub(crate) fn create_html(
                             .detail
                             .iter()
                             .filter_map(|r| match r {
-                                DiffDetail::Text { line, score } => {
-                                    Some(format!("{} {}", line, score)) //TODO: want the text difference
-                                }
+                                DiffDetail::Text {
+                                    line,
+                                    score,
+                                    actual,
+                                    nominal,
+                                } => Some(format!(
+                                    "Mismatch in line {}. Expected: '{}' found '{}' (diff: {})",
+                                    line, nominal, actual, score
+                                )),
                                 _ => None,
                             })
                             .collect();
@@ -632,17 +649,25 @@ pub(crate) fn create_html(
                         .unwrap_or_default()
                     }
                     ComparisonMode::PDFText(_) => {
-                        let diffs: Vec<(&usize, &f64)> = file
-                            .detail
-                            .iter()
-                            .filter_map(|r| match r {
-                                DiffDetail::Text { line, score } => {
-                                    //TODO: displayed line should be + 1
-                                    Some((line, score)) //TODO: want the text difference
-                                }
-                                _ => None,
-                            })
-                            .collect();
+                        let diffs: Vec<(&usize, String)> =
+                            file.detail
+                                .iter()
+                                .filter_map(|r| match r {
+                                    DiffDetail::Text {
+                                        line,
+                                        score,
+                                        actual,
+                                        nominal,
+                                    } => Some((
+                                        line,
+                                        format!(
+                                        "Mismatch in line {}. Expected: '{}' found '{}' (diff: {})",
+                                        line + 1, nominal, actual, score
+                                    ),
+                                    )),
+                                    _ => None,
+                                })
+                                .collect();
 
                         write_pdf_detail(&file.nominal_file, &file.actual_file, &diffs, &sub_folder)
                             .unwrap_or_default()

@@ -51,7 +51,7 @@ pub fn compare_files<P: AsRef<Path>>(
                 );
 
                 error!("{}" , &error);
-                difference.push_detail(DiffDetail::Text {score: distance, line: l});
+                difference.push_detail(DiffDetail::Text {actual:a.to_owned(), nominal:n.to_owned(), score: distance, line: l});
                 difference.error();
             }
         });
