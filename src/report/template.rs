@@ -529,9 +529,26 @@ pub const ERROR_DETAIL_TEMPLATE: &str = r###"
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Error</title>
-    <style>
+     <title>Error(s)</title>
+     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+     
+     <style>
 
+   		h3 {
+			background-color:black;
+			color:white;
+			padding:10px;
+			margin:10px 0;
+			cursor:pointer;
+		}
+		
+		table {
+		  table-layout: fixed;
+		}
+
+        table.dataTable#report tbody tr {
+            background-color: #fbcccc;
+        }
 
     </style>
 </head>
@@ -552,10 +569,34 @@ pub const ERROR_DETAIL_TEMPLATE: &str = r###"
 	</table>
 </p>
 
-<p style="color:red">
-	{{ error }}
-</p>
+<table id="report">
+    <thead>
+    <tr>
+        <th>Error</th>
+    </tr>
+    </thead>
+    <tbody>
+        {% for error in errors %}
+            <tr>
+                <td>{{ error }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        let table = new DataTable('#report', {
+        	iDisplayLength: -1,
+			bPaginate: false,
+    		bLengthChange: false,
+    		bFilter: false,
+    		bInfo: false
+        });
+    });
+</script>
 
 </body>
 </html>
@@ -618,10 +659,6 @@ pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
 <body>
 
 <h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
-
-<p class="has_error">
-{{ message }}
-</p>
 
 <table id="compare">
 	<thead>

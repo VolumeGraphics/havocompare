@@ -467,7 +467,6 @@ pub fn write_external_detail(
     actual: impl AsRef<Path>,
     stdout: &str,
     stderr: &str,
-    message: &str,
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
     let detail_path = create_detail_folder(report_dir.as_ref())?;
@@ -484,7 +483,6 @@ pub fn write_external_detail(
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
     ctx.insert("stdout", stdout);
     ctx.insert("stderr", stderr);
-    ctx.insert("message", message);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
     debug!("detail html {:?} created", &detail_file);
@@ -497,7 +495,7 @@ pub fn write_external_detail(
 fn create_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    error: Box<dyn std::error::Error>,
+    errors: &[&String],
     report_dir: impl AsRef<Path>,
 ) -> Result<DetailPath, Error> {
     let sub_folder = create_detail_folder(report_dir.as_ref())?;
@@ -512,7 +510,7 @@ fn create_error_detail(
     let mut ctx = Context::new();
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
-    ctx.insert("error", &error.to_string());
+    ctx.insert("errors", errors);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
 
@@ -524,22 +522,14 @@ fn create_error_detail(
 pub fn write_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    error: Box<dyn std::error::Error>,
+    errors: &[&String],
     report_dir: impl AsRef<Path>,
-) -> RenderToHtmlDifference {
-    let mut result = RenderToHtmlDifference {
-        diff: Default::default(),
-        detail_path: None,
-        additional_columns: vec![],
-    };
-
-    if let Ok(sub_folder) = create_error_detail(nominal, actual, error, report_dir) {
-        result.detail_path = Some(sub_folder);
+) -> Option<DetailPath> {
+    if let Ok(sub_folder) = create_error_detail(nominal, actual, errors, report_dir) {
+        Some(sub_folder)
     } else {
-        error!("Could not create error detail");
+        None
     }
-
-    result
 }
 
 pub(crate) fn create_reports(
@@ -593,15 +583,28 @@ pub(crate) fn create_html(
             .diffs
             .iter()
             .map(|file| {
-                // let diffs: Vec<&DiffDetail> = file
-                //     .detail
-                //     .iter()
-                //     .filter(|r| matches!(r, DiffDetail::Error(_)))
-                //     .collect();
+                let errors: Vec<&String> = file
+                    .detail
+                    .iter()
+                    .filter_map(|r| match r {
+                        DiffDetail::Error(s) => Some(s),
+                        _ => None,
+                    })
+                    .collect();
 
-                // TODO: Write diffs to report -> this is crate error?
+                if !errors.is_empty() {
+                    return RenderToHtmlDifference {
+                        diff: file.clone(),
+                        detail_path: write_error_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &errors,
+                            &sub_folder,
+                        ),
+                        additional_columns: Vec::new(),
+                    };
+                }
 
-                //TODO: use Unwrap_or_else display error in report + console
                 let detail_path = match &rule_difference.rule.file_type {
                     ComparisonMode::CSV(config) => {
                         let diffs: Vec<&DiffType> = file
@@ -620,7 +623,7 @@ pub(crate) fn create_html(
                             &config.delimiters,
                             &sub_folder,
                         )
-                        .unwrap_or_default()
+                        .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
                     ComparisonMode::PlainText(_) => {
                         let diffs: Vec<String> = file
@@ -646,7 +649,7 @@ pub(crate) fn create_html(
                             &diffs,
                             &sub_folder,
                         )
-                        .unwrap_or_default()
+                        .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
                     ComparisonMode::PDFText(_) => {
                         let diffs: Vec<(&usize, String)> =
@@ -670,7 +673,7 @@ pub(crate) fn create_html(
                                 .collect();
 
                         write_pdf_detail(&file.nominal_file, &file.actual_file, &diffs, &sub_folder)
-                            .unwrap_or_default()
+                            .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
                     ComparisonMode::Image(_) => {
                         let diffs: Vec<(&f64, &String)> = file
@@ -690,7 +693,7 @@ pub(crate) fn create_html(
                             &diffs, //should actually only 1 image per file compare
                             &sub_folder,
                         )
-                        .unwrap_or_default()
+                        .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
                     ComparisonMode::External(_) => {
                         if let Some((stdout, stderr)) = file
@@ -707,10 +710,9 @@ pub(crate) fn create_html(
                                 &file.actual_file,
                                 stdout,
                                 stderr,
-                                "", //TODO: this is DiffDetail::Error
                                 &sub_folder,
                             )
-                            .unwrap_or_default()
+                            .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                         } else {
                             None
                         }
@@ -735,7 +737,7 @@ pub(crate) fn create_html(
                             &diffs,
                             &sub_folder,
                         )
-                        .unwrap_or_default()
+                        .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
                 };
 
@@ -869,6 +871,11 @@ pub(crate) fn get_relative_path(
     paths.reverse();
 
     PathBuf::from_iter(paths)
+}
+
+fn log_detail_html_creation_error(e: &Error) -> Option<DetailPath> {
+    error!("Could not create HTML-Detail: {}", e.to_string());
+    None
 }
 
 #[cfg(test)]
