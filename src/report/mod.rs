@@ -1,8 +1,8 @@
 mod template;
 
-use crate::csv::{Delimiters, DiffType, Position, Table};
+use crate::csv::{DiffType, Position, Table};
 use crate::properties::MetaDataPropertyDiff;
-use crate::{ComparisonMode, Rule};
+use crate::{CSVCompareConfig, ComparisonMode, Rule};
 use pdf_extract::extract_text;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -212,7 +212,7 @@ pub(crate) fn write_csv_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[&DiffType],
-    config: &Delimiters,
+    config: &CSVCompareConfig,
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
     let mut headers: CSVReportRow = CSVReportRow {
@@ -221,8 +221,16 @@ pub(crate) fn write_csv_detail(
         has_error: false,
     };
 
-    let nominal_table = Table::from_reader(File::open(nominal.as_ref())?, config)?;
-    let actual_table = Table::from_reader(File::open(actual.as_ref())?, config)?;
+    let mut nominal_table = Table::from_reader(File::open(nominal.as_ref())?, &config.delimiters)?;
+    let mut actual_table = Table::from_reader(File::open(actual.as_ref())?, &config.delimiters)?;
+
+    if let Some(preprocessors) = &config.preprocessing {
+        for preprocessor in preprocessors.iter() {
+            preprocessor.process(&mut nominal_table)?;
+            preprocessor.process(&mut actual_table)?;
+        }
+    }
+
     nominal_table
         .columns
         .iter()
@@ -620,7 +628,7 @@ pub(crate) fn create_html(
                             &file.nominal_file,
                             &file.actual_file,
                             &diffs,
-                            &config.delimiters,
+                            &config,
                             &sub_folder,
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
