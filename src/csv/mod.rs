@@ -32,9 +32,6 @@ pub enum Error {
     #[error("Failed to compile regex {0}")]
     /// Regex compilation failed
     RegexCompilationFailed(#[from] regex::Error),
-    #[error("Problem creating csv report {0}")]
-    /// Reporting could not be created
-    ReportingFailed(#[from] report::Error),
     #[error("File access failed {0}")]
     /// File access failed
     FileAccessFailed(#[from] FatIOError),
@@ -59,32 +56,52 @@ pub enum Error {
     UnequalRowCount(usize, usize),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Position {
+/// A position inside a table
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct Position {
+    /// row number, starting with zero
     pub row: usize,
+    /// column number, starting with zero
     pub col: usize,
 }
 
-#[derive(Debug)]
-pub(crate) enum DiffType {
+#[derive(Debug, Serialize, Clone)]
+/// Difference of a table entry
+pub enum DiffType {
+    /// Both entries were strings, but had different contents
     UnequalStrings {
+        /// nominal string
         nominal: String,
+        /// actual string
         actual: String,
+        /// position
         position: Position,
     },
+    /// Both entries were [`Quantity`]s but exceeded tolerances
     OutOfTolerance {
+        /// nominal
         nominal: Quantity,
+        /// actual
         actual: Quantity,
+        /// compare mode that was exceeded
         mode: Mode,
+        /// position in table
         position: Position,
     },
+    /// both fields had different value types
     DifferentValueTypes {
+        /// nominal
         nominal: Value,
+        /// actual
         actual: Value,
+        /// position
         position: Position,
     },
+    /// Both fields were headers but with different contents
     UnequalHeader {
+        /// nominal
         nominal: String,
+        /// actual
         actual: String,
     },
 }
@@ -209,7 +226,7 @@ impl Mode {
     }
 }
 
-#[derive(JsonSchema, Deserialize, Serialize, Debug, Default)]
+#[derive(JsonSchema, Deserialize, Serialize, Debug, Default, Clone)]
 /// Settings for the CSV comparison module
 pub struct CSVCompareConfig {
     #[serde(flatten)]
@@ -489,23 +506,19 @@ pub(crate) fn compare_paths(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     config: &CSVCompareConfig,
-) -> Result<report::FileCompareResult, Error> {
+) -> Result<report::Difference, Error> {
     let nominal_file = fat_io_wrap_std(nominal.as_ref(), &File::open)?;
     let actual_file = fat_io_wrap_std(actual.as_ref(), &File::open)?;
 
-    let (nominal_table, actual_table, results) =
-        get_diffs_readers(&nominal_file, &actual_file, config)?;
+    let (_, _, results) = get_diffs_readers(&nominal_file, &actual_file, config)?;
     results.iter().for_each(|error| {
         error!("{}", &error);
     });
-
-    Ok(report::write_csv_detail(
-        nominal_table,
-        actual_table,
-        nominal.as_ref(),
-        actual.as_ref(),
-        results.as_slice(),
-    )?)
+    let is_error = !results.is_empty();
+    let mut result = report::Difference::new_for_file(nominal.as_ref(), actual.as_ref());
+    result.is_error = is_error;
+    result.detail = results.into_iter().map(report::DiffDetail::CSV).collect();
+    Ok(result)
 }
 
 #[cfg(test)]

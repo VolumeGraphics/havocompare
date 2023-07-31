@@ -1,4 +1,5 @@
 use crate::report;
+use crate::report::{DiffDetail, Difference};
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,7 @@ use tracing::error;
 use vg_errortools::fat_io_wrap_std;
 use vg_errortools::FatIOError;
 
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// Plain text comparison config, also used for PDF
 pub struct HTMLCompareConfig {
     /// Normalized Damerau-Levenshtein distance, 0.0 = bad, 1.0 = identity
@@ -58,14 +59,12 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &HTMLCompareConfig,
-) -> Result<report::FileCompareResult, Error> {
+) -> Result<Difference, Error> {
     let actual = BufReader::new(fat_io_wrap_std(actual_path.as_ref(), &File::open)?);
     let nominal = BufReader::new(fat_io_wrap_std(nominal_path.as_ref(), &File::open)?);
 
-    let mut diffs: Vec<String> = Vec::new();
-
     let exclusion_list = config.get_ignore_list()?;
-
+    let mut difference = Difference::new_for_file(nominal_path, actual_path);
     actual
         .lines()
         .enumerate()
@@ -84,16 +83,12 @@ pub fn compare_files<P: AsRef<Path>>(
                 );
 
                 error!("{}" , &error);
-
-                diffs.push(error);
+                difference.push_detail(DiffDetail::Text {actual: a, nominal: n, score: distance, line: l});
+                difference.error();
             }
         });
 
-    Ok(report::write_html_detail(
-        nominal_path.as_ref(),
-        actual_path.as_ref(),
-        &diffs,
-    )?)
+    Ok(difference)
 }
 
 #[cfg(test)]
@@ -121,8 +116,6 @@ mod test {
         let result = compare_files(actual, nominal, &HTMLCompareConfig::default()).unwrap();
 
         assert!(result.is_error);
-
-        assert!(result.detail_path.is_some());
     }
 
     #[test]
