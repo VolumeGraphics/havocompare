@@ -24,6 +24,9 @@ mod pdf;
 mod properties;
 mod report;
 
+mod json;
+pub use crate::json::JsonConfig;
+
 use crate::external::ExternalConfig;
 pub use crate::html::HTMLCompareConfig;
 use crate::properties::PropertiesConfig;
@@ -92,6 +95,9 @@ pub enum ComparisonMode {
     PDFText(HTMLCompareConfig),
     /// Compare file-properties
     FileProperties(PropertiesConfig),
+
+    /// Compare JSON files
+    Json(JsonConfig),
 
     /// Run external comparison executable
     External(ExternalConfig),
@@ -193,6 +199,9 @@ fn process_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>, rule: &Rule
             ComparisonMode::External(conf) => {
                 external::compare_files(nominal.as_ref(), actual.as_ref(), conf)
                     .map_err(|e| e.into())
+            }
+            ComparisonMode::Json(conf) => {
+                json::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
         }
     };

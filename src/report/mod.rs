@@ -703,7 +703,7 @@ pub(crate) fn create_html(
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
-                    ComparisonMode::External(_) => {
+                    ComparisonMode::External(_) | ComparisonMode::Json(_) => {
                         if let Some((stdout, stderr)) = file
                             .detail
                             .iter()
