@@ -683,3 +683,81 @@ pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
 </body>
 </html>
 "###;
+
+pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r###"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Results</title>
+     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+
+     <style>
+
+		h3 {
+			background-color:black;
+			color:white;
+			padding:10px;
+			margin:10px 0;
+			cursor:pointer;
+		}
+
+		table {
+		  table-layout: fixed;
+		}
+
+        table.dataTable tr.odd {
+            background-color: #dddddd;
+        }
+
+		.has_diff {
+			color: #0d6efdf0;
+		}
+
+		.has_error {
+			color:red;
+		}
+
+		#compare th {
+			text-align:left;
+			background-color: #cccccc;
+			padding:10px;
+		}
+
+		#compare td {
+			white-space: pre;
+		}
+
+		#compare td:first-child {
+			border-right: 1px solid black;
+		}
+
+		table#compare {
+			border:1px solid grey;
+		}
+
+    </style>
+</head>
+<body>
+
+<h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
+
+<table id="compare">
+	<thead>
+		<tr>
+			<th>Differences</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td class="has_error">
+{{ differences }}
+			</td>
+		</tr>
+	</tbody>
+</table>
+
+
+</body>
+</html>
+"###;

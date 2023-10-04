@@ -42,10 +42,12 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         .collect();
 
     if !filtered_diff.is_empty() {
-        let all_diffs_log = filtered_diff.iter().map(|(_, v)| v).join("\n");
-        diff.push_detail(DiffDetail::External {
-            stdout: all_diffs_log,
-            stderr: String::new(),
+        let all_diffs_log = filtered_diff
+            .iter()
+            .map(|(d, v)| format!("{d}: {v}"))
+            .join("\n");
+        diff.push_detail(DiffDetail::Json {
+            differences: all_diffs_log,
         });
 
         diff.error();

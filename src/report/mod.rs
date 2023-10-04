@@ -119,7 +119,7 @@ impl Difference {
             return false;
         }
         self.is_error |= other.is_error;
-        self.detail.extend(other.detail.into_iter());
+        self.detail.extend(other.detail);
         true
     }
 }
@@ -145,6 +145,9 @@ pub enum DiffDetail {
     External {
         stdout: String,
         stderr: String,
+    },
+    Json {
+        differences: String,
     },
     Properties(MetaDataPropertyDiff),
     Error(String),
@@ -265,7 +268,7 @@ pub(crate) fn write_csv_detail(
 
             let columns: Vec<CSVReportColumn> = n
                 .into_iter()
-                .zip(a.into_iter())
+                .zip(a)
                 .enumerate()
                 .map(|(col, (n, a))| {
                     let current_pos = Position { col, row };
@@ -500,6 +503,34 @@ pub fn write_external_detail(
     Ok(Some(detail_path))
 }
 
+pub fn write_json_detail(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    differences: &str,
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
+    let detail_path = create_detail_folder(report_dir.as_ref())?;
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
+
+    let mut tera = Tera::default();
+    tera.add_raw_template(
+        &detail_file.to_string_lossy(),
+        template::PLAIN_JSON_DETAIL_TEMPLATE,
+    )?;
+
+    let mut ctx = Context::new();
+    ctx.insert("actual", &actual.as_ref().to_string_lossy());
+    ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
+    ctx.insert("differences", differences);
+
+    let file = fat_io_wrap_std(&detail_file, &File::create)?;
+    debug!("detail html {:?} created", &detail_file);
+
+    tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
+
+    Ok(Some(detail_path))
+}
+
 fn create_error_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
@@ -628,7 +659,7 @@ pub(crate) fn create_html(
                             &file.nominal_file,
                             &file.actual_file,
                             &diffs,
-                            &config,
+                            config,
                             &sub_folder,
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
@@ -703,7 +734,7 @@ pub(crate) fn create_html(
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
-                    ComparisonMode::External(_) | ComparisonMode::Json(_) => {
+                    ComparisonMode::External(_) => {
                         if let Some((stdout, stderr)) = file
                             .detail
                             .iter()
@@ -718,6 +749,27 @@ pub(crate) fn create_html(
                                 &file.actual_file,
                                 stdout,
                                 stderr,
+                                &sub_folder,
+                            )
+                            .unwrap_or_else(|e| log_detail_html_creation_error(&e))
+                        } else {
+                            None
+                        }
+                    }
+                    ComparisonMode::Json(_) => {
+                        if let Some(differences) = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::Json { differences } => Some(differences),
+                                _ => None,
+                            })
+                            .next()
+                        {
+                            write_json_detail(
+                                &file.nominal_file,
+                                &file.actual_file,
+                                differences,
                                 &sub_folder,
                             )
                             .unwrap_or_else(|e| log_detail_html_creation_error(&e))

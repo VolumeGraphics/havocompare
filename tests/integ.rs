@@ -36,3 +36,17 @@ fn images_test() {
     )
     .unwrap());
 }
+
+#[test]
+fn json_test() {
+    let report_dir =
+        tempfile::tempdir().expect("Could not generate temporary directory for report");
+
+    assert!(!compare_folders(
+        "tests/integ/data/json/expected/",
+        "tests/integ/data/json/actual/",
+        "tests/integ/json.yml",
+        report_dir
+    )
+    .unwrap());
+}
