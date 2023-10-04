@@ -5,6 +5,11 @@
 [![Coverage Status](https://coveralls.io/repos/github/VolumeGraphics/havocompare/badge.svg?branch=main)](https://coveralls.io/github/VolumeGraphics/havocompare?branch=main)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
+## Contributors:
+<a href="https://github.com/VolumeGraphics/havocompare/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=VolumeGraphics/havocompare"  alt="Contributors"/>
+</a>
+
 ## Quickstart
 
 ### 0. Install havocompare
