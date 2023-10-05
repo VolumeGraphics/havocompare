@@ -1,6 +1,6 @@
 pub const INDEX_FILENAME: &str = "index.html";
 pub const DETAIL_FILENAME: &str = "detail.html";
-pub const INDEX_TEMPLATE: &str = r###"
+pub const INDEX_TEMPLATE: &str = r##"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,9 +127,9 @@ pub const INDEX_TEMPLATE: &str = r###"
 </script>
 </body>
 </html>
-"###;
+"##;
 
-pub const PLAIN_TEXT_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_TEXT_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -186,9 +186,9 @@ pub const PLAIN_TEXT_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -258,9 +258,9 @@ pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -398,9 +398,9 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -522,9 +522,9 @@ The extracted exact text can be downloaded here: <a href="./{{ nominal_extracted
 
 </body>
 </html>
-"###;
+"#;
 
-pub const ERROR_DETAIL_TEMPLATE: &str = r###"
+pub const ERROR_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -600,9 +600,9 @@ pub const ERROR_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -682,9 +682,9 @@ pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -771,4 +771,4 @@ pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
