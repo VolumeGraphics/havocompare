@@ -715,10 +715,10 @@ pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r###"
 		}
 
 		.has_right {
-			color:red;
+			color:green;
 		}
 		.has_left {
-			color:green;
+			color:red;
 		}
 
 		#compare th {
