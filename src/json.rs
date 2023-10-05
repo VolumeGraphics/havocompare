@@ -18,11 +18,11 @@ impl JsonConfig {
             .ignore_keys
             .as_ref()
             .map(|v| v.iter().map(|v| Regex::new(v)).collect());
-        return if let Some(result) = exclusion_list {
+        if let Some(result) = exclusion_list {
             result
         } else {
             Ok(Vec::new())
-        };
+        }
     }
 }
 
