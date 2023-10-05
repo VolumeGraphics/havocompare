@@ -226,7 +226,27 @@ rules:
         - "--only-images"
 ```
 
+
+#### JSON comparison
+Compares JSON files for different keys in both files and mismatches in values.
+ignore_keys elements will be ignored, no substring or regex is supported here. 
+If you need this, please file a bug.
+
+```yaml
+rules:
+- name: "Compare JSON files"
+  pattern_include:
+  - "**/*.json"
+  Json:
+    ignore_keys:
+    - ""
+```
+
+
 ## Changelog
+
+### 0.5.0
+- Add basic JSON checking
 
 ### 0.4.0
 - Separate reporting logic from comparison logic
