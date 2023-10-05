@@ -714,8 +714,11 @@ pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r###"
 			color: #0d6efdf0;
 		}
 
-		.has_error {
+		.has_right {
 			color:red;
+		}
+		.has_left {
+			color:green;
 		}
 
 		#compare th {
@@ -741,17 +744,25 @@ pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r###"
 <body>
 
 <h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
-
+<div>{{ root_mismatch }} </div>
 <table id="compare">
 	<thead>
 		<tr>
+			<th>Left extra</th>
 			<th>Differences</th>
+			<th>Right extra</th>
 		</tr>
 	</thead>
 	<tbody>
 		<tr>
-			<td class="has_error">
+			<td class="has_left">
+{{ left }}
+			</td>
+			<td >
 {{ differences }}
+			</td>
+			<td class="has_right">
+{{ right }}
 			</td>
 		</tr>
 	</tbody>

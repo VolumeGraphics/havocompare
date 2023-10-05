@@ -148,6 +148,9 @@ pub enum DiffDetail {
     },
     Json {
         differences: String,
+        right: String,
+        left: String,
+        root_mismatch: Option<String>,
     },
     Properties(MetaDataPropertyDiff),
     Error(String),
@@ -506,7 +509,10 @@ pub fn write_external_detail(
 pub fn write_json_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
+    left: &str,
+    right: &str,
     differences: &str,
+    root_mismatch: &Option<String>,
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
     let detail_path = create_detail_folder(report_dir.as_ref())?;
@@ -522,6 +528,9 @@ pub fn write_json_detail(
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
     ctx.insert("differences", differences);
+    ctx.insert("left", left);
+    ctx.insert("right", right);
+    ctx.insert("root_mismatch", root_mismatch);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
     debug!("detail html {:?} created", &detail_file);
@@ -757,11 +766,16 @@ pub(crate) fn create_html(
                         }
                     }
                     ComparisonMode::Json(_) => {
-                        if let Some(differences) = file
+                        if let Some((differences, left, right, root_mismatch)) = file
                             .detail
                             .iter()
                             .filter_map(|r| match r {
-                                DiffDetail::Json { differences } => Some(differences),
+                                DiffDetail::Json {
+                                    left,
+                                    differences,
+                                    right,
+                                    root_mismatch,
+                                } => Some((differences, left, right, root_mismatch)),
                                 _ => None,
                             })
                             .next()
@@ -769,7 +783,10 @@ pub(crate) fn create_html(
                             write_json_detail(
                                 &file.nominal_file,
                                 &file.actual_file,
+                                left,
+                                right,
                                 differences,
+                                root_mismatch,
                                 &sub_folder,
                             )
                             .unwrap_or_else(|e| log_detail_html_creation_error(&e))

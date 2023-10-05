@@ -151,12 +151,12 @@
     "JsonConfig": {
       "description": "configuration for the json compare module",
       "type": "object",
-      "required": [
-        "ignore_keys"
-      ],
       "properties": {
         "ignore_keys": {
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
           }
