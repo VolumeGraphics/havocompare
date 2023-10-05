@@ -229,17 +229,18 @@ rules:
 
 #### JSON comparison
 Compares JSON files for different keys in both files and mismatches in values.
-ignore_keys elements will be ignored, no substring or regex is supported here. 
-If you need this, please file a bug.
+ignore_keys elements will be ignored, full regex matching on only the key names / paths is supported.
+The values are not affected by this.
 
 ```yaml
 rules:
 - name: "Compare JSON files"
   pattern_include:
   - "**/*.json"
-  Json:
+  Json: 
     ignore_keys:
-    - ""
+      # drop "ignore_this_key" and "ignore_this_keys" with this regex :)
+      - "ignore_this_key(s?)"
 ```
 
 
