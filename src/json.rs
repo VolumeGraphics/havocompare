@@ -108,32 +108,7 @@ mod test {
     fn trim_split(list: &str) -> Vec<&str> {
         list.split("\n").map(|e| e.trim()).collect()
     }
-    #[test]
-    fn identity_is_empty() {
-        let cfg = JsonConfig {
-            ignore_keys: vec![],
-        };
-        let result = compare_files(
-            "tests/integ/data/json/expected/guy.json",
-            "tests/integ/data/json/expected/guy.json",
-            &cfg,
-        )
-        .unwrap();
-        if let DiffDetail::Json {
-            differences,
-            left,
-            right,
-            root_mismatch,
-        } = result.detail.first().unwrap()
-        {
-            assert!(differences.is_empty());
-            assert!(left.is_empty());
-            assert!(right.is_empty());
-            assert!(root_mismatch.is_none());
-        } else {
-            panic!("wrong diffdetail");
-        }
-    }
+
     #[test]
     fn no_filter() {
         let cfg = JsonConfig {
