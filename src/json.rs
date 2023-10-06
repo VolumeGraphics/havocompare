@@ -10,19 +10,12 @@ use tracing::error;
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// configuration for the json compare module
 pub struct JsonConfig {
-    ignore_keys: Option<Vec<String>>,
+    #[serde(default)]
+    ignore_keys: Vec<String>,
 }
 impl JsonConfig {
     pub(crate) fn get_ignore_list(&self) -> Result<Vec<Regex>, regex::Error> {
-        let exclusion_list: Option<Result<Vec<_>, regex::Error>> = self
-            .ignore_keys
-            .as_ref()
-            .map(|v| v.iter().map(|v| Regex::new(v)).collect());
-        if let Some(result) = exclusion_list {
-            result
-        } else {
-            Ok(Vec::new())
-        }
+        self.ignore_keys.iter().map(|v| Regex::new(v)).collect()
     }
 }
 
@@ -115,11 +108,36 @@ mod test {
     fn trim_split(list: &str) -> Vec<&str> {
         list.split("\n").map(|e| e.trim()).collect()
     }
-
+    #[test]
+    fn identity_is_empty() {
+        let cfg = JsonConfig {
+            ignore_keys: vec![],
+        };
+        let result = compare_files(
+            "tests/integ/data/json/expected/guy.json",
+            "tests/integ/data/json/expected/guy.json",
+            &cfg,
+        )
+        .unwrap();
+        if let DiffDetail::Json {
+            differences,
+            left,
+            right,
+            root_mismatch,
+        } = result.detail.first().unwrap()
+        {
+            assert!(differences.is_empty());
+            assert!(left.is_empty());
+            assert!(right.is_empty());
+            assert!(root_mismatch.is_none());
+        } else {
+            panic!("wrong diffdetail");
+        }
+    }
     #[test]
     fn no_filter() {
         let cfg = JsonConfig {
-            ignore_keys: Some(vec![]),
+            ignore_keys: vec![],
         };
         let result = compare_files(
             "tests/integ/data/json/expected/guy.json",
@@ -151,7 +169,7 @@ mod test {
     #[test]
     fn filter_works() {
         let cfg = JsonConfig {
-            ignore_keys: Some(vec!["name".to_string(), "brother(s?)".to_string()]),
+            ignore_keys: vec!["name".to_string(), "brother(s?)".to_string()],
         };
         let result = compare_files(
             "tests/integ/data/json/expected/guy.json",
