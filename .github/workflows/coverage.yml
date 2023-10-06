@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install latest nightly
       uses: actions-rs/toolchain@v1
       with:
@@ -22,7 +22,7 @@ jobs:
     - name: install grcov
       run: cargo install grcov
     
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 0
         
@@ -37,8 +37,8 @@ jobs:
          grcov . -s . --binary-path ./target/debug/ -t lcov --llvm --branch --ignore-not-existing --ignore="/*" --ignore="target/*" --ignore="tests/*"  -o lcov.info
          
     - name: Push grcov results to Coveralls via GitHub Action
-      uses: coverallsapp/github-action@v1.0.1
+      uses: coverallsapp/github-action@v2
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        path-to-lcov: "lcov.info"
+        file: "lcov.info"
         
