@@ -148,6 +148,21 @@
         }
       }
     },
+    "JsonConfig": {
+      "description": "configuration for the json compare module",
+      "type": "object",
+      "properties": {
+        "ignore_keys": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "Mode": {
       "description": "comparison mode for csv cells",
       "oneOf": [
@@ -453,6 +468,19 @@
           "properties": {
             "FileProperties": {
               "$ref": "#/definitions/PropertiesConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Compare JSON files",
+          "type": "object",
+          "required": [
+            "Json"
+          ],
+          "properties": {
+            "Json": {
+              "$ref": "#/definitions/JsonConfig"
             }
           },
           "additionalProperties": false

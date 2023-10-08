@@ -5,6 +5,11 @@
 [![Coverage Status](https://coveralls.io/repos/github/VolumeGraphics/havocompare/badge.svg?branch=main)](https://coveralls.io/github/VolumeGraphics/havocompare?branch=main)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
+## Contributors:
+<a href="https://github.com/VolumeGraphics/havocompare/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=VolumeGraphics/havocompare"  alt="Contributors"/>
+</a>
+
 ## Quickstart
 
 ### 0. Install havocompare
@@ -221,7 +226,28 @@ rules:
         - "--only-images"
 ```
 
+
+#### JSON comparison
+Compares JSON files for different keys in both files and mismatches in values.
+ignore_keys elements will be ignored, full regex matching on only the key names / paths is supported.
+The values are not affected by this.
+
+```yaml
+rules:
+- name: "Compare JSON files"
+  pattern_include:
+  - "**/*.json"
+  Json: 
+    ignore_keys:
+      # drop "ignore_this_key" and "ignore_this_keys" with this regex :)
+      - "ignore_this_key(s?)"
+```
+
+
 ## Changelog
+
+### 0.5.0
+- Add basic JSON checking
 
 ### 0.4.0
 - Separate reporting logic from comparison logic

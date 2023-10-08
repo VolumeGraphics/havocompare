@@ -1,0 +1,5 @@
+rules:
+  - name: "Compare JSON files"
+    pattern_include:
+      - "**/*.json"
+    Json: {}

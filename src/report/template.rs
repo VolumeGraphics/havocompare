@@ -1,6 +1,6 @@
 pub const INDEX_FILENAME: &str = "index.html";
 pub const DETAIL_FILENAME: &str = "detail.html";
-pub const INDEX_TEMPLATE: &str = r###"
+pub const INDEX_TEMPLATE: &str = r##"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,9 +127,9 @@ pub const INDEX_TEMPLATE: &str = r###"
 </script>
 </body>
 </html>
-"###;
+"##;
 
-pub const PLAIN_TEXT_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_TEXT_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -186,9 +186,9 @@ pub const PLAIN_TEXT_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -258,9 +258,9 @@ pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -398,9 +398,9 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -522,9 +522,9 @@ The extracted exact text can be downloaded here: <a href="./{{ nominal_extracted
 
 </body>
 </html>
-"###;
+"#;
 
-pub const ERROR_DETAIL_TEMPLATE: &str = r###"
+pub const ERROR_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -600,9 +600,9 @@ pub const ERROR_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
 
-pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
+pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -682,4 +682,93 @@ pub const PLAIN_EXTERNAL_DETAIL_TEMPLATE: &str = r###"
 
 </body>
 </html>
-"###;
+"#;
+
+pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Results</title>
+     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+
+     <style>
+
+		h3 {
+			background-color:black;
+			color:white;
+			padding:10px;
+			margin:10px 0;
+			cursor:pointer;
+		}
+
+		table {
+		  table-layout: fixed;
+		}
+
+        table.dataTable tr.odd {
+            background-color: #dddddd;
+        }
+
+		.has_diff {
+			color: #0d6efdf0;
+		}
+
+		.has_right {
+			color:green;
+		}
+		.has_left {
+			color:red;
+		}
+
+		#compare th {
+			text-align:left;
+			background-color: #cccccc;
+			padding:10px;
+		}
+
+		#compare td {
+			white-space: pre;
+		}
+
+		#compare td:first-child {
+			border-right: 1px solid black;
+		}
+
+		table#compare {
+			border:1px solid grey;
+		}
+
+    </style>
+</head>
+<body>
+
+<h3>Compare Result of {{ actual }} and {{ nominal }}</h3>
+<div>{{ root_mismatch }} </div>
+<table id="compare">
+	<thead>
+		<tr>
+			<th>Left extra</th>
+			<th>Differences</th>
+			<th>Right extra</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td class="has_left">
+{{ left }}
+			</td>
+			<td >
+{{ differences }}
+			</td>
+			<td class="has_right">
+{{ right }}
+			</td>
+		</tr>
+	</tbody>
+</table>
+
+
+</body>
+</html>
+"#;
