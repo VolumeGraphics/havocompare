@@ -128,9 +128,9 @@ mod test {
         } = result.detail.first().unwrap()
         {
             let differences = trim_split(differences);
-            assert!(differences.contains(&"car -> [ \"RX7\" :: \"Panda Trueno\" ]"));
-            assert!(differences.contains(&"age -> [ 21 :: 18 ]"));
-            assert!(differences.contains(&"name -> [ \"Keisuke\" :: \"Takumi\" ]"));
+            assert!(differences.contains(&"car -> { \"RX7\" != \"Panda Trueno\" }"));
+            assert!(differences.contains(&"age -> { 21 != 18 }"));
+            assert!(differences.contains(&"name -> { \"Keisuke\" != \"Takumi\" }"));
             assert_eq!(differences.len(), 3);
 
             assert_eq!(left.as_str(), " brothers");
@@ -160,8 +160,8 @@ mod test {
         } = result.detail.first().unwrap()
         {
             let differences = trim_split(differences);
-            assert!(differences.contains(&"car -> [ \"RX7\" :: \"Panda Trueno\" ]"));
-            assert!(differences.contains(&"age -> [ 21 :: 18 ]"));
+            assert!(differences.contains(&"car -> { \"RX7\" != \"Panda Trueno\" }"));
+            assert!(differences.contains(&"age -> { 21 != 18 }"));
             assert_eq!(differences.len(), 2);
             assert!(right.is_empty());
             assert!(left.is_empty());
