@@ -247,7 +247,7 @@ rules:
 ## Changelog
 
 ### 0.5.0
-- Add basic JSON checking
+- Add JSON checking
 
 ### 0.4.0
 - Separate reporting logic from comparison logic
