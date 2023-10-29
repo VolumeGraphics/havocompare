@@ -281,7 +281,7 @@ fn process_rule(
     let mut all_okay = true;
     nominal_cleaned_paths
         .into_iter()
-        .zip(actual_cleaned_paths.into_iter())
+        .zip(actual_cleaned_paths)
         .for_each(|(n, a)| {
             let compare_result = process_file(n, a, rule);
             all_okay &= !compare_result.is_error;

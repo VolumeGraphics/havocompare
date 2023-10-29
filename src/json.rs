@@ -106,7 +106,7 @@ mod test {
     use super::*;
 
     fn trim_split(list: &str) -> Vec<&str> {
-        list.split("\n").map(|e| e.trim()).collect()
+        list.split('\n').map(|e| e.trim()).collect()
     }
 
     #[test]
