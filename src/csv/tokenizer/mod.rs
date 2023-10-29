@@ -66,7 +66,7 @@ impl SpecialCharacter {
 
 impl PartialOrd<Self> for SpecialCharacter {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.get_position().partial_cmp(&other.get_position())
+        Some(self.cmp(other))
     }
 }
 
