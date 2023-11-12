@@ -246,6 +246,9 @@ rules:
 
 ## Changelog
 
+### 0.5.1
+- Fix potential crash in JSON checking
+
 ### 0.5.0
 - Add JSON checking
 
