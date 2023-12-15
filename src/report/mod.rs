@@ -947,7 +947,19 @@ pub(crate) fn get_relative_path(
 
     paths.reverse();
 
-    PathBuf::from_iter(paths)
+    if paths.is_empty() {
+        let name = if let (Some(actual), Some(nominal)) = (
+            actual_path.as_ref().file_name(),
+            nominal_path.as_ref().file_name(),
+        ) {
+            format!("{}-{}", actual.to_string_lossy(), nominal.to_string_lossy())
+        } else {
+            "unknown".to_owned()
+        };
+        PathBuf::from(name)
+    } else {
+        PathBuf::from_iter(paths)
+    }
 }
 
 fn log_detail_html_creation_error(e: &Error) -> Option<DetailPath> {
@@ -996,6 +1008,20 @@ mod tests {
             "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
         );
         assert_eq!(PathBuf::from("Volume1.csv"), result);
+
+        let result = get_relative_path(
+            "csv/other.csv",
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/volume1.csv",
+        );
+
+        assert_eq!(PathBuf::from("other.csv-volume1.csv"), result);
+
+        let result = get_relative_path(
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/volume1.csv",
+            "tests/integ/data/display_of_status_message_in_cm_tables/expected/Volume1.csv",
+        );
+
+        assert_eq!(PathBuf::from("volume1.csv-Volume1.csv"), result);
     }
 
     #[test]

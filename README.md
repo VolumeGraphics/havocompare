@@ -246,6 +246,11 @@ rules:
 
 ## Changelog
 
+### 0.5.2
+- Preserve white spaces in CSV and PDF report instead of being collapsed by HTML
+- Add + and - symbols to the report index
+- Display combined file names in report index if the compared file names are different
+
 ### 0.5.1
 - Fix potential crash in JSON checking
 
