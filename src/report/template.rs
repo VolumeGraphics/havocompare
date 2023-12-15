@@ -310,6 +310,10 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r#"
 		table.dataTable tbody td, table.dataTable thead th {
 			padding:0px 0px;
 		}
+		
+		.pre-text {
+			white-space:pre;
+		}
 
     </style>
 </head>
@@ -366,10 +370,10 @@ pub const PLAIN_CSV_DETAIL_TEMPLATE: &str = r#"
             	<td data-order="{{ loop.index0 }}">{% if row.has_diff or row.has_error %}&nbsp;<br>{% endif %}{{ loop.index0 }}</td>
             	{% for col in row.columns %}
 					<td>
-					{{ col.nominal_value }}
+					<span class="pre-text">{{ col.nominal_value }}</span>
 					{% if row.has_diff or row.has_error %}
 						<div class="{% if col.diffs|length > 0 %} diffs {% elif col.nominal_value != col.actual_value %} actual {% else %} {% endif %}">
-						{{ col.actual_value }}
+						<span class="pre-text">{{ col.actual_value }}</span>
 						</div>
 					{% endif %}
                 	 </td>
@@ -456,6 +460,10 @@ pub const PLAIN_PDF_DETAIL_TEMPLATE: &str = r#"
 		table#compare {
 			border:1px solid grey;
 		}
+		
+		.pre-text {
+			white-space:pre;
+		}
 
     </style>
 </head>
@@ -479,14 +487,14 @@ The extracted exact text can be downloaded here: <a href="./{{ nominal_extracted
 	{% for line in combined_lines %}
 		<tr>
 			<td>{{ loop.index }}</td>
-			<td>{{ line.nominal_value|safe }}</td>
+			<td><span class="pre-text">{{ line.nominal_value|safe }}</span></td>
 			<td>
 				{% if line.diffs|length > 0 %}
-					<span class="has_error">{{ line.actual_value|safe }}</span>
+					<span class="pre-text has_error">{{ line.actual_value|safe }}</span>
 				{% elif line.actual_value != line.nominal_value %}
-					<span class="has_diff">{{ line.actual_value|safe }}</span>
+					<span class="pre-text has_diff">{{ line.actual_value|safe }}</span>
 				{% else %}
-					{{ line.actual_value|safe }}
+					<span class="pre-text">{{ line.actual_value|safe }}</span>
 				{% endif %}
 			</td>
 		</tr>
