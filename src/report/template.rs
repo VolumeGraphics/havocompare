@@ -37,6 +37,14 @@ pub const INDEX_TEMPLATE: &str = r##"
 			color:red;
 		}
 
+  		.ui-accordion-header-active:before {
+		  	content: '-'
+		}
+
+		.ui-accordion-header-collapsed:before {
+		  	content: '+'
+		}
+
     </style>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
 </head>
