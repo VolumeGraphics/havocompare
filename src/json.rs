@@ -12,6 +12,8 @@ use tracing::error;
 pub struct JsonConfig {
     #[serde(default)]
     ignore_keys: Vec<String>,
+    #[serde(default)]
+    sort_arrays: bool,
 }
 impl JsonConfig {
     pub(crate) fn get_ignore_list(&self) -> Result<Vec<Regex>, regex::Error> {
@@ -31,7 +33,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
     let actual = vg_errortools::fat_io_wrap_std(&actual, &std::fs::read_to_string)?;
     let ignores = config.get_ignore_list()?;
 
-    let json_diff = json_diff::process::compare_jsons(&nominal, &actual);
+    let json_diff = json_diff::process::compare_jsons(&nominal, &actual, config.sort_arrays);
     let json_diff = match json_diff {
         Ok(diff) => diff,
         Err(e) => {
@@ -113,6 +115,7 @@ mod test {
     fn no_filter() {
         let cfg = JsonConfig {
             ignore_keys: vec![],
+            sort_arrays: false,
         };
         let result = compare_files(
             "tests/integ/data/json/expected/guy.json",
@@ -128,12 +131,12 @@ mod test {
         } = result.detail.first().unwrap()
         {
             let differences = trim_split(differences);
-            assert!(differences.contains(&"car -> { \"RX7\" != \"Panda Trueno\" }"));
-            assert!(differences.contains(&"age -> { 21 != 18 }"));
-            assert!(differences.contains(&"name -> { \"Keisuke\" != \"Takumi\" }"));
+            assert!(differences.contains(&"car->{\"RX7\"!=\"Panda Trueno\"}"));
+            assert!(differences.contains(&"age->{21!=18}"));
+            assert!(differences.contains(&"name->{\"Keisuke\"!=\"Takumi\"}"));
             assert_eq!(differences.len(), 3);
 
-            assert_eq!(left.as_str(), " brothers");
+            assert_eq!(left.as_str(), "brothers");
             assert!(right.is_empty());
             assert!(root_mismatch.is_none());
         } else {
@@ -145,6 +148,7 @@ mod test {
     fn filter_works() {
         let cfg = JsonConfig {
             ignore_keys: vec!["name".to_string(), "brother(s?)".to_string()],
+            sort_arrays: false,
         };
         let result = compare_files(
             "tests/integ/data/json/expected/guy.json",
@@ -160,8 +164,8 @@ mod test {
         } = result.detail.first().unwrap()
         {
             let differences = trim_split(differences);
-            assert!(differences.contains(&"car -> { \"RX7\" != \"Panda Trueno\" }"));
-            assert!(differences.contains(&"age -> { 21 != 18 }"));
+            assert!(differences.contains(&"car->{\"RX7\"!=\"Panda Trueno\"}"));
+            assert!(differences.contains(&"age->{21!=18}"));
             assert_eq!(differences.len(), 2);
             assert!(right.is_empty());
             assert!(left.is_empty());
