@@ -243,8 +243,40 @@ rules:
       - "ignore_this_key(s?)"
 ```
 
+### Use HavoCompare in your unit-tests
+1. Add havocompare to your dev-dependencies:
+    ```toml
+    [dev-dependencies]
+    havocompare = "0.5"
+    ```
+2. Use it in a unit-test like
+    ```rust
+    #[test]
+    // works in 0.5 series
+    fn integ_test_dirs() {
+      let result_dir = process_whatever_test_data();
+      // just write the usual yaml file
+      let result = havocompare::compare_folders("../tests/data/nominal/integ_test/case", &result_dir, "../tests/data/config.yaml", "../tests/out_report").unwrap;
+      assert!(result);
+    }
+    #[test]
+    // works starting with 0.5.3 only
+    fn integ_test_file() {
+      let result_file = process_generate_image();
+      // see docs for all options
+      let compare_mode = ComparisonMode::Image(ImageCompareConfig{threshold: 0.97});
+      let result = havocompare::compare_files("../tests/data/nominal.png", &result_file, &compare_mode).unwrap;
+      assert!(result);
+    }
+    ```
 
 ## Changelog
+
+### 0.5.3
+- Add option to sort json arrays (including deep sorting)
+- Make single file comparison function to public api
+- Update dependencies, fix broken pdf import regarding whitespaces
+
 
 ### 0.5.2
 - Preserve white spaces in CSV and PDF report instead of being collapsed by HTML
