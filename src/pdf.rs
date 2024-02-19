@@ -89,7 +89,7 @@ mod test {
             "tests/pdf/expected.pdf",
             &HTMLCompareConfig {
                 threshold: 1.0,
-                ignore_lines: Some(vec!["/ w o r k s p a c e /".to_owned()]),
+                ignore_lines: Some(vec!["/workspace/".to_owned()]),
             },
         )
         .unwrap();

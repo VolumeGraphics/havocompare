@@ -167,7 +167,12 @@ fn filter_exclude(paths: Vec<PathBuf>, excludes: Vec<PathBuf>) -> Vec<PathBuf> {
         .collect()
 }
 
-fn process_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>, rule: &Rule) -> Difference {
+/// Use this to compare a single file against another file using a given rule
+pub fn compare_files(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    comparison_mode: &ComparisonMode,
+) -> Difference {
     let file_name_nominal = nominal.as_ref().to_string_lossy();
     let file_name_actual = actual.as_ref().to_string_lossy();
     let _file_span = span!(tracing::Level::INFO, "Processing");
@@ -176,7 +181,7 @@ fn process_file(nominal: impl AsRef<Path>, actual: impl AsRef<Path>, rule: &Rule
     info!("File: {file_name_nominal} | {file_name_actual}");
 
     let compare_result: Result<Difference, Box<dyn std::error::Error>> = {
-        match &rule.file_type {
+        match comparison_mode {
             ComparisonMode::CSV(conf) => {
                 csv::compare_paths(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
@@ -283,7 +288,7 @@ fn process_rule(
         .into_iter()
         .zip(actual_cleaned_paths)
         .for_each(|(n, a)| {
-            let compare_result = process_file(n, a, rule);
+            let compare_result = compare_files(n, a, &rule.file_type);
             all_okay &= !compare_result.is_error;
             compare_results.push(compare_result);
         });
@@ -314,13 +319,10 @@ pub fn compare_folders_cfg(
 
             let rule_name = rule.name.as_str();
 
-            let result = match okay {
-                Ok(result) => result,
-                Err(e) => {
-                    println!("Error occurred during rule-processing for rule {rule_name}: {e}");
-                    false
-                }
-            };
+            let result = okay.unwrap_or_else(|e| {
+                println!("Error occurred during rule-processing for rule {rule_name}: {e}");
+                false
+            });
             rule_results.push(report::RuleDifferences {
                 rule,
                 diffs: compare_results,
