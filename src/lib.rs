@@ -175,8 +175,7 @@ pub fn compare_files(
 ) -> Difference {
     let file_name_nominal = nominal.as_ref().to_string_lossy();
     let file_name_actual = actual.as_ref().to_string_lossy();
-    let _file_span = span!(tracing::Level::INFO, "Processing");
-    let _file_span = _file_span.enter();
+    let _file_span = span!(tracing::Level::INFO, "Processing").entered();
 
     info!("File: {file_name_nominal} | {file_name_actual}");
 
@@ -247,8 +246,7 @@ fn process_rule(
     rule: &Rule,
     compare_results: &mut Vec<Difference>,
 ) -> Result<bool, Error> {
-    let _file_span = span!(tracing::Level::INFO, "Rule");
-    let _file_span = _file_span.enter();
+    let _file_span = span!(tracing::Level::INFO, "Rule").entered();
     info!("Name: {}", rule.name.as_str());
     if !nominal.as_ref().is_dir() {
         error!(

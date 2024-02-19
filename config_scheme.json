@@ -153,13 +153,15 @@
       "type": "object",
       "properties": {
         "ignore_keys": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "default": [],
+          "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "sort_arrays": {
+          "default": false,
+          "type": "boolean"
         }
       }
     },

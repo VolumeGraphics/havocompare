@@ -584,8 +584,7 @@ pub(crate) fn create_reports(
     rule_differences: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let _reporting_span = span!(tracing::Level::INFO, "Reporting");
-    let _reporting_span = _reporting_span.enter();
+    let _reporting_span = span!(tracing::Level::INFO, "Reporting").entered();
     let report_dir = report_path.as_ref();
     if report_dir.is_dir() {
         info!("Delete report folder");
@@ -604,8 +603,7 @@ pub(crate) fn create_json(
     rule_differences: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let _reporting_span = span!(tracing::Level::INFO, "JSON");
-    let _reporting_span = _reporting_span.enter();
+    let _reporting_span = span!(tracing::Level::INFO, "JSON").entered();
     let report_dir = report_path.as_ref();
     let writer = report_dir.join("report.json");
     let writer = fat_io_wrap_std(writer, &File::create)?;
@@ -617,8 +615,7 @@ pub(crate) fn create_html(
     rule_differences: &[RuleDifferences],
     report_path: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    let _reporting_span = span!(tracing::Level::INFO, "HTML");
-    let _reporting_span = _reporting_span.enter();
+    let _reporting_span = span!(tracing::Level::INFO, "HTML").entered();
     let report_dir = report_path.as_ref();
 
     let mut html_rule_differences: Vec<RenderToHtmlRuleDifferences> = Vec::new();
