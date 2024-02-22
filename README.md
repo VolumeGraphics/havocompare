@@ -272,6 +272,9 @@ rules:
 
 ## Changelog
 
+### 0.5.4
+- Add option to run single file mode from CLI
+
 ### 0.5.3
 - Add option to sort json arrays (including deep sorting)
 - Make single file comparison function to public api
