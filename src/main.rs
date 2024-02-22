@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use clap::Parser;
-use havocompare::{compare_folders, get_schema, validate_config};
-use std::path::Path;
+use havocompare::{compare_files, compare_folders, get_schema, validate_config, ComparisonMode};
+use std::path::{Path, PathBuf};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -23,6 +23,15 @@ enum Commands {
         /// Open the report immediately after comparison
         #[arg(short, long)]
         open: bool,
+    },
+    /// Compare two files given a config-string that contains a json-serialized config
+    FileCompare {
+        /// nominal file
+        nominal: PathBuf,
+        /// actual file
+        actual: PathBuf,
+        /// compare_configuration in json
+        config: String,
     },
 
     /// Export the JsonSchema for the config files
@@ -83,6 +92,22 @@ fn main() -> Result<(), vg_errortools::MainError> {
                 Ok(())
             } else {
                 Err(anyhow!("Comparison failed!").into())
+            }
+        }
+        Commands::FileCompare {
+            nominal,
+            actual,
+            config,
+        } => {
+            let config: ComparisonMode = serde_json::from_str(&config)
+                .map_err(|e| format!("Couldn't deserialize the config string: {e}"))
+                .unwrap();
+            let result = compare_files(nominal, actual, &config);
+            info!("Diff results: {result:#?}");
+            if result.is_error {
+                Err(anyhow!("Comparison failed!").into())
+            } else {
+                Ok(())
             }
         }
         Commands::Validate { compare_config } => {

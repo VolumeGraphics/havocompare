@@ -11,6 +11,7 @@ authors = ["Volume Graphics GmbH"]
 exclude = ["tests/pdf", "tests/integ", "tests/html", "target", "tests/csv", ".github", "test_report"]
 keywords = ["diff" ,"compare", "csv", "image", "difference"]
 categories = ["filesystem"]
+default-run = "havocompare"
 
 [[bin]]
 name = "print_args"
