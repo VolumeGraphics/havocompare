@@ -204,7 +204,7 @@ mod tests {
             !file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(toml_file), 0)
                 .is_error
         );
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
         assert!(
             file_modification_time_out_of_tolerance(Path::new(toml_file), file.path(), 0).is_error
         );
