@@ -6,14 +6,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
-
-  CHECKOUT_ACTION_VERSION: v4
   RUST_TOOLCHAIN_VERSION: stable
-  DPRINT_VERSION: 0.45
-
-  LINUX_IMAGE: ubuntu-22.04
-  MACOS_IMAGE: macos-12
-  WINDOWS_IMAGE: windows-2022
 
 # TODO caching (dprint exe, rust files, sccache)
 # TODO musl build, static link for msvc
@@ -22,55 +15,27 @@ env:
 # TODO lock file?
 
 jobs:
-  lint:
-    runs-on: ${{ env.LINUX_IMAGE }}
-    steps:
-      - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - uses: actions/checkout@${{ env.CHECKOUT_ACTION_VERSION }}
-
-      - run: cargo install --locked dprint@${{ env.DPRINT_VERSION }}
-      - run: dprint check
-      - name: fetch
-        run: cargo fetch
-      - name: clippy
-        run: cargo clippy --all-targets --all-features
-
-  deny:
-    strategy:
-      fail-fast: false
-      matrix:
-        checks:
-          - advisories
-          - bans licenses sources
-    continue-on-error: ${{ matrix.checks == 'advisories' }}
-    runs-on: ${{ env.LINUX_IMAGE }}
-    steps:
-      - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - uses: actions/checkout@${{ env.CHECKOUT_ACTION_VERSION }}
-
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check ${{ matrix.checks }}
-
-  test:
+  ci:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ${{ env.LINUX_IMAGE }}
-          - os: ${{ env.MACOS_IMAGE }}
-          - os: ${{ env.WINDOWS_IMAGE }}
+          - os: ubuntu-22.04
+          - os: macos-12
+          - os: windows-2022
     runs-on: ${{ matrix.os }}
     steps:
       - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
       - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - uses: actions/checkout@${{ env.CHECKOUT_ACTION_VERSION }}
+      - uses: actions/checkout@v4
 
       - name: fetch
         run: cargo fetch
+
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/lint
+
       - name: build
-        run: cargo build --all-targets
+        run: cargo build --all-targets --all-features
       - name: test
-        run: cargo test
+        run: cargo test --all-features

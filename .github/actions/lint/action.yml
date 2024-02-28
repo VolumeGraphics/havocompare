@@ -1,0 +1,25 @@
+name: "Lint"
+description: "Lints for rust"
+inputs:
+  dprint_version:
+    description: dprint version
+    required: true
+    default: "0.45"
+  deny_version:
+    description: cargo deny version
+    required: true
+    default: "0.14"
+runs:
+  using: "composite"
+  steps:
+    # dprint
+    - run: cargo install --locked dprint@${{ inputs.dprint_version }}
+    - run: dprint check
+    # deny
+    - run: cargo install --locked cargo-deny@${{ inputs.deny_version }}
+    - run: cargo deny --all-features check bans licenses sources
+    - run: advisories
+      continue-on-error: true
+    # clippy
+    - name: clippy
+      run: cargo clippy --all-targets --all-features
