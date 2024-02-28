@@ -8,8 +8,8 @@ env:
   RUST_TOOLCHAIN_VERSION: 1.76
 
 # TODO caching (rust files, sccache)
-# TODO test coverage
 # TODO ensure config scheme is up to date
+# TODO yaml formatting
 
 jobs:
   lint:
@@ -71,20 +71,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }} -t ${{ matrix.target }}
-      - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - if: ${{ matrix.component }}
-        run: rustup component add ${{ matrix.component }}
+      - name: Setup toolchain
+        run: |
+          rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }} -t ${{ matrix.target }} --no-self-update
+          rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
 
       - name: Fetch
         run: cargo fetch
       - name: Clippy
         if: ${{ matrix.component == 'clippy' }}
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets --all-features -- -D warnings
       - name: Build debug
         run: cargo build --all-targets --all-features --target ${{ matrix.target }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
       - name: Test
         run: cargo test --all-features --target ${{ matrix.target }}
+
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
         env:
