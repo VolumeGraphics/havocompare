@@ -5,13 +5,12 @@ concurrency:
   cancel-in-progress: true
 env:
   CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN_VERSION: 1.76.0
+  RUST_TOOLCHAIN_VERSION: 1.76
 
 # TODO caching (rust files, sccache)
 # TODO test coverage
 # TODO lock file?
 # TODO ensure config scheme is up to date
-# TODO linux musl
 
 jobs:
   lint:
@@ -59,6 +58,8 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             component: clippy
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
           - os: macos-12
             target: x86_64-apple-darwin
           - os: macos-14
