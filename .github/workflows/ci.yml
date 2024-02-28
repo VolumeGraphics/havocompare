@@ -1,0 +1,76 @@
+name: ci
+on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+  CHECKOUT_ACTION_VERSION: v4
+  RUST_TOOLCHAIN_VERSION: stable
+  DPRINT_VERSION: 0.45
+
+  LINUX_IMAGE: ubuntu-22.04
+  MACOS_IMAGE: macos-12
+  WINDOWS_IMAGE: windows-2022
+
+# TODO caching (dprint exe, rust files, sccache)
+# TODO musl build, static link for msvc
+# TODO test coverage
+# TODO release (arm macos-14)
+# TODO lock file?
+
+jobs:
+  lint:
+    runs-on: ${{ env.LINUX_IMAGE }}
+    steps:
+      - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
+      - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
+      - uses: actions/checkout@${{ env.CHECKOUT_ACTION_VERSION }}
+
+      - run: cargo install --locked dprint@${{ env.DPRINT_VERSION }}
+      - run: dprint check
+      - name: fetch
+        run: cargo fetch
+      - name: clippy
+        run: cargo clippy --all-targets --all-features
+
+  deny:
+    strategy:
+      fail-fast: false
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+    runs-on: ${{ env.LINUX_IMAGE }}
+    steps:
+      - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
+      - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
+      - uses: actions/checkout@${{ env.CHECKOUT_ACTION_VERSION }}
+
+      - uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check ${{ matrix.checks }}
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ${{ env.LINUX_IMAGE }}
+          - os: ${{ env.MACOS_IMAGE }}
+          - os: ${{ env.WINDOWS_IMAGE }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
+      - run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
+      - uses: actions/checkout@${{ env.CHECKOUT_ACTION_VERSION }}
+
+      - name: fetch
+        run: cargo fetch
+      - name: build
+        run: cargo build --all-targets
+      - name: test
+        run: cargo test
