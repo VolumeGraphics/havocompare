@@ -9,7 +9,6 @@ env:
 
 # TODO caching (rust files, sccache)
 # TODO test coverage
-# TODO lock file?
 # TODO ensure config scheme is up to date
 
 jobs:

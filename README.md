@@ -17,7 +17,7 @@
 ### 0. Install havocompare
 
 You have rust? cool! try:
-`cargo install havocompare`
+`cargo install --locked havocompare`
 
 You just want a binary:
 Check our binary downloads on github-pages
