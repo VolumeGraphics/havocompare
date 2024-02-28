@@ -8,15 +8,53 @@ env:
   RUSTFLAGS: -Dwarnings
   RUST_TOOLCHAIN_VERSION: stable
 
-# TODO caching (dprint exe, rust files, sccache)
+# TODO caching (rust files, sccache)
 # TODO musl build, static link for msvc
 # TODO test coverage
 # TODO release (arm macos-14)
 # TODO lock file?
 # TODO build release
+# TODO ensure config scheme is up to date
 
 jobs:
-  ci:
+  lint:
+    runs-on: ubuntu-22.04
+    env:
+      DPRINT_VERSION: 0.45.0
+      DENY_VERSION: 0.14.15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup path
+        run: |
+          CARGO_INSTALL_ROOT=${{ runner.temp }}/cache
+          echo "CARGO_INSTALL_ROOT=${CARGO_INSTALL_ROOT}" >> "${GITHUB_ENV}"
+          echo "DPRINT_CACHE_DIR=${CARGO_INSTALL_ROOT}/dprint" >> "${GITHUB_ENV}"
+          echo "${CARGO_INSTALL_ROOT}/bin" >> "${GITHUB_PATH}"
+
+      - name: Cache
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ env.CARGO_INSTALL_ROOT }}
+          key: lint-dprint-${{ env.DPRINT_VERSION }}-deny-${{ env.DENY_VERSION }}-${{ hashFiles('dprint.json') }}
+
+      - name: Install dprint
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo install --locked 'dprint@${{ env.DPRINT_VERSION }}'
+      - name: Install deny
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo install --locked 'cargo-deny@${{ env.DENY_VERSION }}'
+
+      - name: Check formatting
+        run: dprint check
+      - name: Check deny
+        run: cargo deny --all-features check bans licenses sources
+      - name: Check advisories
+        run: cargo deny --all-features check advisories
+        continue-on-error: true
+
+  main:
     strategy:
       fail-fast: false
       matrix:
@@ -25,21 +63,24 @@ jobs:
           - os: macos-12
           - os: windows-2022
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install toolchain
         run: rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }}
       - name: Setup toolchain
         run: rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
-      - uses: actions/checkout@v4
 
       - name: Fetch
         run: cargo fetch
-
-      - if: runner.os == 'Linux'
-        uses: ./.github/actions/lint
-        name: Lint
-
       - name: Build
         run: cargo build --all-targets --all-features
+      - name: Clippy
+        if: runner.os == 'Linux'
+        run: cargo clippy --all-targets --all-features
       - name: Test
         run: cargo test --all-features
+
+      - name: Build release
+        run: cargo build --release
