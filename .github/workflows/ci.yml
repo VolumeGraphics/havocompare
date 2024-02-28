@@ -10,7 +10,11 @@ env:
 # TODO caching (rust files, sccache)
 # TODO ensure config scheme is up to date
 # TODO improve code coverage handling
-# TODO handle release
+# TODO handle release for tag
+# TODO - check version: tag vs cargo toml
+# TODO - download artifacts
+# TODO - get changelog
+# TODO - create release
 
 jobs:
   lint:
@@ -100,7 +104,6 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
