@@ -166,7 +166,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn name_regex_works() {
@@ -200,18 +200,13 @@ mod tests {
     #[test]
     fn modification_timestamps() {
         let toml_file = "Cargo.toml";
-        let lock_file = "Cargo.lock";
         assert!(
             !file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(toml_file), 0)
                 .is_error
         );
-        File::open(toml_file)
-            .unwrap()
-            .set_modified(SystemTime::now())
-            .unwrap();
+        let mut file = NamedTempFile::new().unwrap();
         assert!(
-            file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(lock_file), 0)
-                .is_error
+            file_modification_time_out_of_tolerance(Path::new(toml_file), file.path(), 0).is_error
         );
     }
 }

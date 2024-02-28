@@ -9,7 +9,8 @@ env:
 
 # TODO caching (rust files, sccache)
 # TODO ensure config scheme is up to date
-# TODO yaml formatting
+# TODO improve code coverage handling
+# TODO handle release
 
 jobs:
   lint:
@@ -83,8 +84,6 @@ jobs:
         run: |
           rustup component add clippy
           cargo clippy --all-targets --all-features -- -D warnings
-      - name: Build debug
-        run: cargo build --all-targets --all-features --target ${{ matrix.target }}
 
       - name: Install llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
