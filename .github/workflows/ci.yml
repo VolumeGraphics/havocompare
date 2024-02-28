@@ -37,6 +37,7 @@ jobs:
 
       - if: runner.os == 'Linux'
         uses: ./.github/actions/lint
+        name: Lint
 
       - name: Build
         run: cargo build --all-targets --all-features
