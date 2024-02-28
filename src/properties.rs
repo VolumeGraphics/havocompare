@@ -165,8 +165,8 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
     use super::*;
+    use std::fs::File;
 
     #[test]
     fn name_regex_works() {
@@ -205,7 +205,10 @@ mod tests {
             !file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(toml_file), 0)
                 .is_error
         );
-        File::open(lock_file).unwrap().set_modified(SystemTime::now()).unwrap();
+        File::open(toml_file)
+            .unwrap()
+            .set_modified(SystemTime::now())
+            .unwrap();
         assert!(
             file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(lock_file), 0)
                 .is_error

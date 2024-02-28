@@ -86,18 +86,16 @@ jobs:
       - name: Build debug
         run: cargo build --all-targets --all-features --target ${{ matrix.target }}
 
-      - name: Install cargo-llvm-cov
+      - name: Install llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate code coverage
+      - name: Test
         run: cargo llvm-cov --all-features --target ${{ matrix.target }} --lcov --output-path lcov.info
-      - name: Push grcov results to Coveralls via GitHub Action
+      - name: Publish code coverage
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          flag-name: ${{ matrix.target }}
           file: lcov.info
-
-      - name: Test
-        run: cargo test --all-features --target ${{ matrix.target }}
 
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
