@@ -165,6 +165,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
     use super::*;
 
     #[test]
@@ -195,6 +196,7 @@ mod tests {
         );
         assert!(file_size_out_of_tolerance(Path::new(toml_file), Path::new(lock_file), 0).is_error);
     }
+
     #[test]
     fn modification_timestamps() {
         let toml_file = "Cargo.toml";
@@ -203,6 +205,7 @@ mod tests {
             !file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(toml_file), 0)
                 .is_error
         );
+        File::open(lock_file).unwrap().set_modified(SystemTime::now()).unwrap();
         assert!(
             file_modification_time_out_of_tolerance(Path::new(toml_file), Path::new(lock_file), 0)
                 .is_error
