@@ -57,8 +57,8 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            component: clippy
             target: x86_64-unknown-linux-gnu
+            component: clippy
           - os: macos-12
             target: x86_64-apple-darwin
           - os: macos-14
@@ -81,11 +81,18 @@ jobs:
       - name: Clippy
         if: ${{ matrix.component == 'clippy' }}
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Build
-        run: cargo build --all-targets --all-features
+      - name: Build debug
+        run: cargo build --all-targets --all-features --target ${{ matrix.target }}
       - name: Test
-        run: cargo test --all-features
+        run: cargo test --all-features --target ${{ matrix.target }}
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: havocompare-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/havocompare${{ startsWith(matrix.os, 'windows') && '.exe' || '' }}
+          if-no-files-found: error
