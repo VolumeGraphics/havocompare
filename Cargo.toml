@@ -1,57 +1,55 @@
 [package]
 name = "havocompare"
-description = "A flexible rule-based file and folder comparison tool and crate including nice html reporting. Compares CSVs, JSON, text files, pdf-texts and images."
-repository = "https://github.com/VolumeGraphics/havocompare"
-homepage = "https://github.com/VolumeGraphics/havocompare"
-documentation = "https://docs.rs/havocompare"
 version = "0.5.4"
-edition = "2021"
-license = "MIT"
 authors = ["Volume Graphics GmbH"]
-exclude = ["tests/pdf", "tests/integ", "tests/html", "target", "tests/csv", ".github", "test_report"]
-keywords = ["diff" ,"compare", "csv", "image", "difference"]
 categories = ["filesystem"]
 default-run = "havocompare"
+documentation = "https://docs.rs/havocompare"
+edition = "2021"
+exclude = ["tests/pdf", "tests/integ", "tests/html", "target", "tests/csv", ".github", "test_report"]
+homepage = "https://github.com/VolumeGraphics/havocompare"
+keywords = ["diff", "compare", "csv", "image", "difference"]
+license = "MIT"
+repository = "https://github.com/VolumeGraphics/havocompare"
+description = "A flexible rule-based file and folder comparison tool and crate including nice html reporting. Compares CSVs, JSON, text files, pdf-texts and images."
 
 [[bin]]
 name = "print_args"
 path = "src/print_args.rs"
 
-
 [dependencies]
-clap = {version= "4.4", features=["derive"]}
+anyhow = "1.0"
 chrono = "0.4"
-serde = "1.0"
-serde_yaml = "0.9"
-schemars = "0.8"
-schemars_derive = "0.8"
-thiserror = "1.0"
-regex = "1.10"
+clap = { version = "4.4", features = ["derive"] }
+data-encoding = "2.5"
+enable-ansi-support = "0.2"
+fs_extra = "1.3"
+glob = "0.3"
 image = "0.24"
 image-compare = "0.3"
+itertools = "0.12"
+json_diff_ng = { version = "0.4" }
+opener = "0.6"
+pdf-extract = "0.7"
+permutation = "0.4"
+rayon = "1.8.0"
+regex = "1.10"
+schemars = "0.8"
+schemars_derive = "0.8"
+serde = "1.0"
+serde_json = "1.0"
+serde_yaml = "0.9"
+sha2 = "0.10"
+strsim = "0.11"
+tempfile = "3.8"
+tera = "1.19"
+test-log = { version = "0.2", features = ["trace"] }
+thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-serde_json = "1.0"
-glob = "0.3"
-test-log = {version="0.2", features=["trace"]}
-strsim = "0.11"
-itertools = "0.12"
-tera = "1.19"
-sha2 = "0.10"
-data-encoding = "2.5"
-permutation = "0.4"
-pdf-extract = "0.7"
 vg_errortools = "0.1"
-rayon = "1.8.0"
-enable-ansi-support = "0.2"
-tempfile = "3.8"
-fs_extra = "1.3"
-opener = "0.6"
-anyhow = "1.0"
-json_diff_ng = {version = "0.4"}
-
 
 [dev-dependencies]
 env_logger = "0.11"
-tracing = {version = "0.1", default-features = false}
-tracing-subscriber = {version = "0.3", default-features = false, features = ["env-filter", "fmt"]}
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt"] }
