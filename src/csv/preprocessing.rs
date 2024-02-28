@@ -493,8 +493,7 @@ mod tests {
 
         assert_eq!(
             table
-                .columns
-                .get(0)
+                .columns.first()
                 .unwrap()
                 .rows
                 .get(1)
