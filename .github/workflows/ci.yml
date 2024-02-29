@@ -5,7 +5,13 @@ concurrency:
   cancel-in-progress: true
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   RUST_TOOLCHAIN_VERSION: 1.76
+  DPRINT_VERSION: 0.45.0
+  DENY_VERSION: 0.14.15
+  GRCOV_VERSION: 0.8.19
+  SCCACHE_VERSION: 0.7.7
+  SCCACHE_CACHE_KEY: v1
 
 # TODO caching (rust files, sccache)
 # TODO ensure config scheme is up to date
@@ -19,32 +25,26 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-22.04
-    env:
-      DPRINT_VERSION: 0.45.0
-      DENY_VERSION: 0.14.15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup path
+      - name: Setup tools path
         run: |
           CARGO_INSTALL_ROOT=${{ runner.temp }}/cache
           echo "CARGO_INSTALL_ROOT=${CARGO_INSTALL_ROOT}" >> "${GITHUB_ENV}"
-          echo "DPRINT_CACHE_DIR=${CARGO_INSTALL_ROOT}/dprint" >> "${GITHUB_ENV}"
           echo "${CARGO_INSTALL_ROOT}/bin" >> "${GITHUB_PATH}"
-
-      - name: Cache
+        shell: bash
+      - name: Cache tools
         uses: actions/cache@v4
-        id: cache
+        id: cache-tools
         with:
           path: ${{ env.CARGO_INSTALL_ROOT }}
-          key: lint-dprint-${{ env.DPRINT_VERSION }}-deny-${{ env.DENY_VERSION }}-${{ hashFiles('dprint.json') }}
-
-      - name: Install dprint
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo install --locked 'dprint@${{ env.DPRINT_VERSION }}'
-      - name: Install deny
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo install --locked 'cargo-deny@${{ env.DENY_VERSION }}'
+          key: tools-dprint-${{ env.DPRINT_VERSION }}-deny-${{ env.DENY_VERSION }}-${{ hashFiles('dprint.json') }}
+      - name: Install tools
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked 'dprint@${{ env.DPRINT_VERSION }}'
+          cargo install --locked 'cargo-deny@${{ env.DENY_VERSION }}'
 
       - name: Check formatting
         run: dprint check
@@ -76,23 +76,56 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup toolchain
+      - name: Install toolchain
         run: |
-          rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }} -t ${{ matrix.target }} --no-self-update
+          # TODO make clippy optional
+          rustup toolchain install --profile minimal ${{ env.RUST_TOOLCHAIN_VERSION }} -t ${{ matrix.target }} --no-self-update -c llvm-tools-preview -c clippy
           rustup default ${{ env.RUST_TOOLCHAIN_VERSION }}
+
+      - name: Setup tools path
+        run: |
+          CARGO_INSTALL_ROOT=${{ runner.temp }}/cache
+          echo "CARGO_INSTALL_ROOT=${CARGO_INSTALL_ROOT}" >> "${GITHUB_ENV}"
+          echo "${CARGO_INSTALL_ROOT}/bin" >> "${GITHUB_PATH}"
+        shell: bash
+      - name: Cache tools
+        uses: actions/cache@v4
+        id: cache-tools
+        with:
+          path: ${{ env.CARGO_INSTALL_ROOT }}
+          key: tools-grcov-${{ env.GRCOV_VERSION }}-sccache-${{ env.SCCACHE_VERSION }}-${{ matrix.os }}
+      - name: Install tools
+        if: steps.cache-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked 'grcov@${{ env.GRCOV_VERSION }}'
+          cargo install --locked 'sccache@${{ env.SCCACHE_VERSION }}'
+
+      - name: Configure sccache
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Start sccache server
+        run: sccache --start-server
+        env:
+          SCCACHE_GHA_VERSION: ${{ env.SCCACHE_CACHE_KEY }}
+          SCCACHE_IDLE_TIMEOUT: 0
 
       - name: Fetch
         run: cargo fetch
-      - name: Clippy
-        if: ${{ matrix.component == 'clippy' }}
-        run: |
-          rustup component add clippy
-          cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Install llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Build tests
+        run: cargo build --tests  --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: -C instrument-coverage
+          RUSTC_WRAPPER: sccache
+      - run: sccache --show-stats
       - name: Test
-        run: cargo llvm-cov --all-features --target ${{ matrix.target }} --lcov --output-path lcov.info
+        run: cargo test --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: -C instrument-coverage
+      - name: Run grcov
+        run: grcov . -s . --binary-path target/${{ matrix.target }}/debug --llvm --branch -t lcov -o lcov.info --keep-only "src/*"
       - name: Publish code coverage
         uses: coverallsapp/github-action@v2
         with:
@@ -100,10 +133,18 @@ jobs:
           flag-name: ${{ matrix.target }}
           file: lcov.info
 
+      - name: Clippy
+        if: ${{ matrix.component == 'clippy' }}
+        run: cargo clippy --all-targets -- -D warnings
+        env:
+          RUSTC_WRAPPER: sccache
+      - run: sccache --show-stats
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
+          RUSTC_WRAPPER: sccache
+      - run: sccache --show-stats
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
