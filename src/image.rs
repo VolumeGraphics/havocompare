@@ -4,7 +4,7 @@ use image::{DynamicImage, Rgb};
 use image_compare::{Algorithm, Metric, Similarity};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 use tracing::error;
 
@@ -178,12 +178,6 @@ pub fn compare_paths<P: AsRef<Path>>(
         }
     };
 
-    let nominal_file_name =
-        get_file_name(nominal_path.as_ref()).ok_or(Error::FileNameParsing(format!(
-            "Could not extract filename from path {:?}",
-            nominal_path.as_ref()
-        )))?;
-    let out_path = (nominal_file_name + "diff_image.png").to_string();
     let mut result_diff = report::Difference::new_for_file(&nominal_path, &actual_path);
     if result.score < config.threshold {
         let out_path_set = if let Some(i) = result.image {
@@ -198,15 +192,6 @@ pub fn compare_paths<P: AsRef<Path>>(
         } else {
             None
         };
-
-    if result.score < config.threshold {
-        let out_path_set;
-        if let Some(i) = result.image {
-            i.save(PathBuf::from(&out_path))?;
-            out_path_set = Some(out_path);
-        } else {
-            out_path_set = None;
-        }
 
         let error_message = format!(
             "Diff for image {} was not met, expected {}, found {}",
