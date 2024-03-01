@@ -185,6 +185,19 @@ pub fn compare_paths<P: AsRef<Path>>(
         )))?;
     let out_path = (nominal_file_name + "diff_image.png").to_string();
     let mut result_diff = report::Difference::new_for_file(&nominal_path, &actual_path);
+    if result.score < config.threshold {
+        let out_path_set = if let Some(i) = result.image {
+            let nominal_file_name =
+                get_file_name(nominal_path.as_ref()).ok_or(Error::FileNameParsing(format!(
+                    "Could not extract filename from path {:?}",
+                    nominal_path.as_ref()
+                )))?;
+            let out_path = (nominal_file_name + "diff_image.png").to_string();
+            i.save(&out_path)?;
+            Some(out_path)
+        } else {
+            None
+        };
 
     if result.score < config.threshold {
         let out_path_set;
