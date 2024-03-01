@@ -13,14 +13,10 @@ env:
   SCCACHE_VERSION: 0.7.7
   SCCACHE_CACHE_KEY: v1
 
-# TODO caching (rust files, sccache)
 # TODO ensure config scheme is up to date
-# TODO improve code coverage handling
-# TODO handle release for tag
-# TODO - check version: tag vs cargo toml
-# TODO - download artifacts
-# TODO - get changelog
-# TODO - create release
+# TODO https://github.com/obi1kenobi/cargo-semver-checks-action
+# TODO semantic commits for changelog and version
+# TODO if it's a tag build disable sccache
 
 jobs:
   lint:
@@ -119,7 +115,7 @@ jobs:
         env:
           RUSTFLAGS: -C instrument-coverage
           RUSTC_WRAPPER: sccache
-      - run: sccache --show-stats
+      - run: sccache --show-stats && sccache -z
       - name: Test
         run: cargo test --target ${{ matrix.target }}
         env:
@@ -138,16 +134,39 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
         env:
           RUSTC_WRAPPER: sccache
-      - run: sccache --show-stats
+      - run: sccache --show-stats && sccache -z
+        if: ${{ matrix.component == 'clippy' }}
+
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
           RUSTC_WRAPPER: sccache
-      - run: sccache --show-stats
+      - run: sccache --show-stats && sccache -z
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: havocompare-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/havocompare${{ startsWith(matrix.os, 'windows') && '.exe' || '' }}
           if-no-files-found: error
+
+  publish:
+    name: publish
+    runs-on: ubuntu-22.04
+    needs: main
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: Cargo.toml
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: havocompare-*
+      - run: ls -larth
+      - run: ls -larth artifacts
+      - name: Create release
+        run: |
+          # TODO - check version: tag vs cargo toml
+          gh --version
+        # if: ${{ startsWith(github.ref, 'refs/tags/') }}
