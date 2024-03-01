@@ -87,6 +87,50 @@
         }
       }
     },
+    "GrayCompareMode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "Structure"
+          ],
+          "properties": {
+            "Structure": {
+              "$ref": "#/definitions/GrayStructureAlgorithm"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Histogram"
+          ],
+          "properties": {
+            "Histogram": {
+              "$ref": "#/definitions/GrayHistogramCompareMetric"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "GrayHistogramCompareMetric": {
+      "type": "string",
+      "enum": [
+        "Correlation",
+        "ChiSquare",
+        "Intersection",
+        "Hellinger"
+      ]
+    },
+    "GrayStructureAlgorithm": {
+      "type": "string",
+      "enum": [
+        "MSSIM",
+        "RMS"
+      ]
+    },
     "HTMLCompareConfig": {
       "description": "Plain text comparison config, also used for PDF",
       "type": "object",
@@ -137,6 +181,44 @@
     "ImageCompareConfig": {
       "description": "Image comparison config options",
       "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "RGB"
+          ],
+          "properties": {
+            "RGB": {
+              "$ref": "#/definitions/RGBCompareMode"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "RGBA"
+          ],
+          "properties": {
+            "RGBA": {
+              "$ref": "#/definitions/RGBACompareMode"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Gray"
+          ],
+          "properties": {
+            "Gray": {
+              "$ref": "#/definitions/GrayCompareMode"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
       "required": [
         "threshold"
       ],
@@ -391,6 +473,77 @@
           "minimum": 0.0
         }
       }
+    },
+    "RGBACompareMode": {
+      "oneOf": [
+        {
+          "description": "full RGBA comparison - probably not intuitive, rarely what you want outside of video processing Will do MSSIM on luma, then RMS on U and V and alpha channels. The calculation of the score is then pixel-wise the minimum of each pixels similarity. To account for perceived indifference in lower alpha regions, this down-weights the difference linearly with mean alpha channel.",
+          "type": "string",
+          "enum": [
+            "Hybrid"
+          ]
+        },
+        {
+          "description": "pre-blend the background in RGBA with this color, use the background RGB values you would assume the pictures to be seen on - usually either black or white",
+          "type": "object",
+          "required": [
+            "HybridBlended"
+          ],
+          "properties": {
+            "HybridBlended": {
+              "type": "object",
+              "required": [
+                "b",
+                "g",
+                "r"
+              ],
+              "properties": {
+                "b": {
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                },
+                "g": {
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                },
+                "r": {
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RGBCompareMode": {
+      "oneOf": [
+        {
+          "description": "Comparing rgb images using structure. RGB structure similarity is performed by doing a channel split and taking the maximum deviation (minimum similarity) for the result. The image contains the complete deviations. Algorithm: RMS",
+          "type": "string",
+          "enum": [
+            "RMS"
+          ]
+        },
+        {
+          "description": "Comparing rgb images using structure. RGB structure similarity is performed by doing a channel split and taking the maximum deviation (minimum similarity) for the result. The image contains the complete deviations. Algorithm: MSSIM",
+          "type": "string",
+          "enum": [
+            "MSSIM"
+          ]
+        },
+        {
+          "description": "Comparing structure via MSSIM on Y channel, comparing color-diff-vectors on U and V summing the squares Please mind that the RGBSimilarity-Image does not contain plain RGB here. Probably what you want.",
+          "type": "string",
+          "enum": [
+            "Hybrid"
+          ]
+        }
+      ]
     },
     "Rule": {
       "description": "Representing a single comparison rule",

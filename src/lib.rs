@@ -379,12 +379,15 @@ pub fn validate_config(config_file: impl AsRef<Path>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::image::ImageCompareConfig;
+    use crate::image::{CompareMode, ImageCompareConfig, RGBCompareMode};
     #[test]
     fn folder_not_found_is_false() {
         let rule = Rule {
             name: "test rule".to_string(),
-            file_type: ComparisonMode::Image(ImageCompareConfig { threshold: 1.0 }),
+            file_type: ComparisonMode::Image(ImageCompareConfig {
+                threshold: 1.0,
+                mode: CompareMode::RGB(RGBCompareMode::Hybrid),
+            }),
             pattern_include: vec!["*.".to_string()],
             pattern_exclude: None,
         };

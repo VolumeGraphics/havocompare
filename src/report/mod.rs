@@ -130,7 +130,7 @@ pub enum DiffDetail {
     CSV(DiffType),
     Image {
         score: f64,
-        diff_image: String,
+        diff_image: Option<String>,
     },
     Text {
         actual: String,
@@ -352,7 +352,7 @@ pub(crate) fn write_csv_detail(
 pub fn write_image_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
-    diffs: &[(&f64, &String)],
+    diffs: &[(&f64, &Option<String>)],
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
     if diffs.is_empty() {
@@ -393,12 +393,13 @@ pub fn write_image_detail(
         .map_err(|e| FatIOError::from_std_io_err(e, nominal.as_ref().to_path_buf()))?;
 
     let (score, diff_image) = diffs[0];
-    let img_target = detail_path.path.join(diff_image);
-    fs::copy(diff_image, &img_target)
-        .map_err(|e| FatIOError::from_std_io_err(e, img_target.to_path_buf()))?;
-
+    if let Some(img) = diff_image {
+        let img_target = detail_path.path.join(img);
+        fs::copy(img, &img_target)
+            .map_err(|e| FatIOError::from_std_io_err(e, img_target.to_path_buf()))?;
+        ctx.insert("diff_image", diff_image);
+    }
     ctx.insert("error", &format!("Score {score}"));
-    ctx.insert("diff_image", diff_image);
     ctx.insert("actual_image", &actual_image);
     ctx.insert("nominal_image", &nominal_image);
 
@@ -721,7 +722,7 @@ pub(crate) fn create_html(
                             .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
                     ComparisonMode::Image(_) => {
-                        let diffs: Vec<(&f64, &String)> = file
+                        let diffs: Vec<(&f64, &Option<String>)> = file
                             .detail
                             .iter()
                             .filter_map(|r| match r {

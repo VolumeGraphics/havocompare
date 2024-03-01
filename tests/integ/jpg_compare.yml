@@ -3,4 +3,5 @@ rules:
     pattern_include:
       - "**/*.jpg"
     Image:
+      RGBA: Hybrid
       threshold: 0.9
