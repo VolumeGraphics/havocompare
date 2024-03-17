@@ -37,11 +37,17 @@ pub enum RGBCompareMode {
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
+/// The distance algorithm to use for grayscale comparison, see
+/// https://github.com/ChrisRega/image-compare for equations
 pub enum GrayStructureAlgorithm {
+    /// SSIM with 8x8 pixel windows and averaging over the result
     MSSIM,
+    /// Classic RMS distance
     RMS,
 }
 
+/// See https://github.com/ChrisRega/image-compare for equations
+/// Distance metrics for histograms for grayscale comparison
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum GrayHistogramCompareMetric {
     Correlation,
