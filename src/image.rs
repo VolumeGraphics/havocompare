@@ -219,8 +219,6 @@ pub fn compare_paths<P: AsRef<Path>>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::image::{compare_paths, ImageCompareConfig};
-    use crate::report::DiffDetail;
 
     #[test]
     fn identity() {
@@ -243,7 +241,7 @@ mod test {
             "tests/integ/data/images/actual/SaveImage_100DPI_default_size.jpg",
             &ImageCompareConfig {
                 threshold: 1.0,
-                mode: CompareMode::RGB(RGBCompareMode::Hybrid),
+                mode: CompareMode::RGBA(RGBACompareMode::Hybrid),
             },
         )
         .unwrap();
@@ -255,11 +253,11 @@ mod test {
         {
             let img = image::open(diff_image.as_ref().unwrap())
                 .unwrap()
-                .into_rgb8();
+                .into_rgba8();
             let nom = image::open("tests/integ/data/images/diff_100_DPI.png")
                 .unwrap()
-                .into_rgb8();
-            let diff_result = image_compare::rgb_hybrid_compare(&img, &nom)
+                .into_rgba8();
+            let diff_result = image_compare::rgba_hybrid_compare(&img, &nom)
                 .expect("Wrong dimensions of diff images!");
             assert_eq!(diff_result.score, 1.0);
         } else {
