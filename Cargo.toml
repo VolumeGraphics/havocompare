@@ -19,7 +19,7 @@ path = "src/print_args.rs"
 
 
 [dependencies]
-clap = { version = "4.4", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 chrono = "0.4"
 serde = "1.0"
 serde_yaml = "0.9"
@@ -38,13 +38,13 @@ strsim = "0.11"
 itertools = "0.12"
 tera = "1.19"
 sha2 = "0.10"
-data-encoding = "2.5"
+data-encoding = "2.6"
 permutation = "0.4"
 pdf-extract = "0.7"
 vg_errortools = "0.1"
-rayon = "1.9.0"
+rayon = "1.10.0"
 enable-ansi-support = "0.2"
-tempfile = "3.8"
+tempfile = "3.10"
 fs_extra = "1.3"
 opener = "0.7"
 anyhow = "1.0"
