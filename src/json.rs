@@ -1,11 +1,13 @@
-use crate::report::{DiffDetail, Difference};
-use crate::Error;
+use std::path::Path;
+
 use itertools::Itertools;
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use tracing::error;
+
+use crate::Error;
+use crate::report::{DiffDetail, Difference};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// configuration for the json compare module
@@ -33,7 +35,8 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
     let actual = vg_errortools::fat_io_wrap_std(&actual, &std::fs::read_to_string)?;
     let ignores = config.get_ignore_list()?;
 
-    let json_diff = json_diff::process::compare_jsons(&nominal, &actual, config.sort_arrays);
+    let json_diff =
+        json_diff::process::compare_jsons(&nominal, &actual, config.sort_arrays, &ignores);
     let json_diff = match json_diff {
         Ok(diff) => diff,
         Err(e) => {
@@ -45,11 +48,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
             return Ok(diff);
         }
     };
-    let filtered_diff: Vec<_> = json_diff
-        .all_diffs()
-        .into_iter()
-        .filter(|(_d, v)| !ignores.iter().any(|excl| excl.is_match(v.get_key())))
-        .collect();
+    let filtered_diff: Vec<_> = json_diff.all_diffs();
 
     if !filtered_diff.is_empty() {
         for (d_type, key) in filtered_diff.iter() {

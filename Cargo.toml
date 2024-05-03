@@ -48,7 +48,7 @@ tempfile = "3.10"
 fs_extra = "1.3"
 opener = "0.7"
 anyhow = "1.0"
-json_diff_ng = { version = "0.4" }
+json_diff_ng = { version = "0.5" }
 
 
 [dev-dependencies]
