@@ -50,7 +50,6 @@ opener = "0.7"
 anyhow = "1.0"
 json_diff_ng = { version = "0.5" }
 
-
 [dev-dependencies]
 env_logger = "0.11"
 tracing = { version = "0.1", default-features = false }

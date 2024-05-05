@@ -99,9 +99,9 @@ fn main() -> Result<(), vg_errortools::MainError> {
             actual,
             config,
         } => {
-            let config: ComparisonMode = serde_json::from_str(&config)
-                .map_err(|e| format!("Couldn't deserialize the config string: {e}"))
-                .unwrap();
+            use anyhow::Context;
+            let config: ComparisonMode =
+                serde_json::from_str(&config).context("Couldn't deserialize the config string")?;
             let result = compare_files(nominal, actual, &config);
             info!("Diff results: {result:#?}");
             if result.is_error {

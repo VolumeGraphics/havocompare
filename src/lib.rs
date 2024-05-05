@@ -380,6 +380,7 @@ pub fn validate_config(config_file: impl AsRef<Path>) -> bool {
 mod tests {
     use super::*;
     use crate::image::{CompareMode, RGBCompareMode};
+
     #[test]
     fn folder_not_found_is_false() {
         let rule = Rule {
