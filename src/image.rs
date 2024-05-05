@@ -1,12 +1,14 @@
-use crate::report::DiffDetail;
-use crate::{get_file_name, report};
+use std::path::Path;
+
 use image::{DynamicImage, Rgb};
 use image_compare::{Algorithm, Metric, Similarity};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use thiserror::Error;
 use tracing::error;
+
+use crate::{get_file_name, report};
+use crate::report::DiffDetail;
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum RGBACompareMode {
@@ -58,14 +60,19 @@ pub enum GrayHistogramCompareMetric {
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum GrayCompareMode {
+    /// Compare gray values pixel structure
     Structure(GrayStructureAlgorithm),
+    /// Compare gray values by histogram
     Histogram(GrayHistogramCompareMetric),
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum CompareMode {
+    /// Compare images as RGB
     RGB(RGBCompareMode),
+    /// Compare images as RGBA
     RGBA(RGBACompareMode),
+    /// Compare images as luminance / grayscale
     Gray(GrayCompareMode),
 }
 
