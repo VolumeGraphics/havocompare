@@ -145,9 +145,8 @@ rules:
 
 #### Image comparison
 
-Image comparison is done using the `image compare` crate's hybrid comparison which does MSSIM on the luma and RMS on the
-color information.
-Only a threshold can be specified:
+Image comparison is done using the `image compare` crate.
+Specify loads of options here and then filter on threshold.
 
 ```yaml
 rules:
@@ -156,8 +155,9 @@ rules:
       - "**/*.jpg"
     # exclude can of course also be specified!
     Image:
-      # threshold is between 0.0 for total difference, 0.5 for very dissimilar and 1.0 for perfect mach
-      # Usually you want to test with values between 0.90 and 0.97
+      # Compare images in RGBA-mode, can also be RGB and Gray
+      # Comparison mode set to Hybrid means we want MSSIM on the Y channel and 2 dim vec diff on UV for color information
+      RGBA: Hybrid
       threshold: 0.9
 ```
 
@@ -307,7 +307,8 @@ rules:
 
 ### 0.6.0
 
-- Add new options for image compare module (loads!)
+- Add new options for image compare module (a lot of options!)
+- Bump json-compare to new version fixing bugs in regex field excludes and sorting
 
 ### 0.5.4
 
