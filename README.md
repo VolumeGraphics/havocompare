@@ -261,7 +261,7 @@ rules:
 #### JSON comparison
 
 Compares JSON files for different keys in both files and mismatches in values.
-ignore_keys elements will be ignored, full regex matching on only the key names / paths is supported.
+`ignore_keys` is a list of regexes that are matched against the individual key names, the key value pair is excluded from the comparison if a regex matches.
 The values are not affected by this.
 
 ```yaml
