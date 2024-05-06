@@ -251,10 +251,12 @@ pub const PLAIN_IMAGE_DETAIL_TEMPLATE: &str = r#"
 <img src="./{{ actual_image }}" />
 </p>
 
+{% if diff_image %}
 <p>
 <h3>Diff:</h3>
 <img src="./{{ diff_image }}" />
 </p>
+{% endif %}
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 <script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.js"></script>

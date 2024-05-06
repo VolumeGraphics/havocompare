@@ -1,14 +1,15 @@
-use crate::{report, Deserialize, Serialize};
-use data_encoding::HEXLOWER;
-
-use crate::report::{DiffDetail, Difference};
-use schemars_derive::JsonSchema;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+
+use data_encoding::HEXLOWER;
+use schemars_derive::JsonSchema;
 use thiserror::Error;
 use vg_errortools::fat_io_wrap_std;
 use vg_errortools::FatIOError;
+
+use crate::{Deserialize, report, Serialize};
+use crate::report::{DiffDetail, Difference};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone, Copy)]
 pub enum HashFunction {
@@ -84,8 +85,9 @@ pub fn compare_files<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::hash::HashFunction::Sha256;
+
+    use super::*;
 
     #[test]
     fn identity() {
@@ -100,7 +102,7 @@ mod test {
 
     #[test]
     fn hash_pinning() {
-        let sum = "bc3abb411d305c4436185c474be3db2608e910612a573f6791b143d7d749b699";
+        let sum = "378f768a589f29fcbd23835ec4764a53610fc910e60b540e1e5204bdaf2c73a0";
         let f1 = Sha256
             .hash_file(File::open("tests/integ/data/images/diff_100_DPI.png").unwrap())
             .unwrap();
