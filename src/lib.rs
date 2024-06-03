@@ -9,37 +9,40 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
+use std::borrow::Cow;
+use std::fs::File;
+use std::io::{BufReader, Read};
+use std::path::{Path, PathBuf};
+
+use schemars::schema_for;
+use schemars_derive::JsonSchema;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use tracing::{debug, error, info, span};
+use vg_errortools::{fat_io_wrap_std, FatIOError};
+
+pub use csv::CSVCompareConfig;
+pub use hash::HashConfig;
+
+use crate::external::ExternalConfig;
+pub use crate::html::HTMLCompareConfig;
+pub use crate::image::ImageCompareConfig;
+pub use crate::json::JsonConfig;
+use crate::properties::PropertiesConfig;
+use crate::report::{DiffDetail, Difference};
+
 /// comparison module for csv comparison
 pub mod csv;
 
-pub use csv::CSVCompareConfig;
-use std::borrow::Cow;
+mod external;
 mod hash;
-pub use hash::HashConfig;
 mod html;
 mod image;
-pub use crate::image::ImageCompareConfig;
-mod external;
 mod pdf;
 mod properties;
 mod report;
 
 mod json;
-pub use crate::json::JsonConfig;
-
-use crate::external::ExternalConfig;
-pub use crate::html::HTMLCompareConfig;
-use crate::properties::PropertiesConfig;
-use crate::report::{DiffDetail, Difference};
-use schemars::schema_for;
-use schemars_derive::JsonSchema;
-use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
-use tracing::{debug, error, info, span};
-use vg_errortools::{fat_io_wrap_std, FatIOError};
 
 #[derive(Error, Debug)]
 /// Top-Level Error class for all errors that can happen during havocompare-running
@@ -378,8 +381,9 @@ pub fn validate_config(config_file: impl AsRef<Path>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::image::{CompareMode, RGBCompareMode};
+
+    use super::*;
 
     #[test]
     fn folder_not_found_is_false() {

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use itertools::Itertools;
+use json_diff_ng::DiffType;
 use regex::Regex;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -31,17 +32,16 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
     let mut diff = Difference::new_for_file(&nominal, &actual);
     let compared_file_name = nominal.as_ref().to_string_lossy().into_owned();
 
-    let nominal = vg_errortools::fat_io_wrap_std(&nominal, &std::fs::read_to_string)?;
-    let actual = vg_errortools::fat_io_wrap_std(&actual, &std::fs::read_to_string)?;
+    let nominal: String = vg_errortools::fat_io_wrap_std(&nominal, &std::fs::read_to_string)?;
+    let actual: String = vg_errortools::fat_io_wrap_std(&actual, &std::fs::read_to_string)?;
     let ignores = config.get_ignore_list()?;
 
-    let json_diff =
-        json_diff::process::compare_jsons(&nominal, &actual, config.sort_arrays, &ignores);
+    let json_diff = json_diff_ng::compare_strs(&nominal, &actual, config.sort_arrays, &ignores);
     let json_diff = match json_diff {
         Ok(diff) => diff,
         Err(e) => {
             let error_message =
-                format!("JSON deserialization failed for {compared_file_name} (error: {e})");
+                format!("JSON comparison failed for {compared_file_name} (error: {e})");
             error!("{}", error_message);
             diff.push_detail(DiffDetail::Error(error_message));
             diff.error();
@@ -57,7 +57,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         let left = filtered_diff
             .iter()
             .filter_map(|(k, v)| {
-                if matches!(k, json_diff::enums::DiffType::LeftExtra) {
+                if matches!(k, DiffType::LeftExtra) {
                     Some(v.to_string())
                 } else {
                     None
@@ -67,7 +67,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         let right = filtered_diff
             .iter()
             .filter_map(|(k, v)| {
-                if matches!(k, json_diff::enums::DiffType::RightExtra) {
+                if matches!(k, DiffType::RightExtra) {
                     Some(v.to_string())
                 } else {
                     None
@@ -77,7 +77,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
         let differences = filtered_diff
             .iter()
             .filter_map(|(k, v)| {
-                if matches!(k, json_diff::enums::DiffType::Mismatch) {
+                if matches!(k, DiffType::Mismatch) {
                     Some(v.to_string())
                 } else {
                     None
@@ -86,7 +86,7 @@ pub(crate) fn compare_files<P: AsRef<Path>>(
             .join("\n");
         let root_mismatch = filtered_diff
             .iter()
-            .find(|(k, _v)| matches!(k, json_diff::enums::DiffType::RootMismatch))
+            .find(|(k, _v)| matches!(k, DiffType::RootMismatch))
             .map(|(_, v)| v.to_string());
 
         diff.push_detail(DiffDetail::Json {
@@ -130,12 +130,13 @@ mod test {
         } = result.detail.first().unwrap()
         {
             let differences = trim_split(differences);
-            assert!(differences.contains(&"car->{\"RX7\"!=\"Panda Trueno\"}"));
-            assert!(differences.contains(&"age->{21!=18}"));
-            assert!(differences.contains(&"name->{\"Keisuke\"!=\"Takumi\"}"));
+
+            assert!(differences.contains(&".car.(\"RX7\" != \"Panda Trueno\")"));
+            assert!(differences.contains(&".age.(21 != 18)"));
+            assert!(differences.contains(&".name.(\"Keisuke\" != \"Takumi\")"));
             assert_eq!(differences.len(), 3);
 
-            assert_eq!(left.as_str(), "brothers");
+            assert_eq!(left.as_str(), ".brothers");
             assert!(right.is_empty());
             assert!(root_mismatch.is_none());
         } else {
@@ -163,8 +164,8 @@ mod test {
         } = result.detail.first().unwrap()
         {
             let differences = trim_split(differences);
-            assert!(differences.contains(&"car->{\"RX7\"!=\"Panda Trueno\"}"));
-            assert!(differences.contains(&"age->{21!=18}"));
+            assert!(differences.contains(&".car.(\"RX7\" != \"Panda Trueno\")"));
+            assert!(differences.contains(&".age.(21 != 18)"));
             assert_eq!(differences.len(), 2);
             assert!(right.is_empty());
             assert!(left.is_empty());
