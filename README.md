@@ -261,7 +261,8 @@ rules:
 #### JSON comparison
 
 Compares JSON files for different keys in both files and mismatches in values.
-`ignore_keys` is a list of regexes that are matched against the individual key names, the key value pair is excluded from the comparison if a regex matches.
+`ignore_keys` is a list of regexes that are matched against the individual key names, the key value pair is excluded
+from the comparison if a regex matches.
 The values are not affected by this.
 
 ```yaml
@@ -304,6 +305,10 @@ rules:
     ```
 
 ## Changelog
+
+### 0.6.1
+
+- Add new version of json-diff, featuring a better API and better filtering options
 
 ### 0.6.0
 
