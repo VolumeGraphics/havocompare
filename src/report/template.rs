@@ -790,3 +790,104 @@ pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r#"
 </body>
 </html>
 "#;
+
+pub const FILE_EXIST_DETAIL_TEMPLATE: &str = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Results</title>
+     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.css"/>
+
+     <style>
+
+   		h3 {
+			background-color:black;
+			color:white;
+			padding:10px;
+			margin:10px 0;
+			cursor:pointer;
+		}
+
+		.actual {
+			color: #0d6efdf0;
+		}
+
+		.diffs {
+			color: #FF4646;
+		}
+
+		table.dataTable {
+			border: 1px solid #999999;
+		}
+
+		.dataTables_wrapper {
+			font-family: monospace;
+    		font-size: 10pt;
+		}
+
+		table.dataTable th:not(:last-child), table.dataTable td:not(:last-child) {
+			border-right: 1px solid #999999;
+		}
+
+		.error {
+            background-color: #fbcccc !important;
+        }
+
+        table.dataTable td, table.dataTable th {
+			white-space:nowrap;
+		}
+
+		table.dataTable tbody td, table.dataTable thead th {
+			padding:0px 0px;
+		}
+
+		.pre-text {
+			white-space:pre;
+		}
+
+    </style>
+</head>
+<body>
+
+<h3>Compare Result</h3>
+
+<p>Mode: {{ mode }}</p>
+
+<table id="report" class="cell-border">
+    <thead>
+	    <tr>
+	    	<th>nominal: {{ nominal }}</th>
+	    	<th>actual: {{ actual }}</th>
+	    </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+            <tr {% if row.2 %} class="error" {% endif %}>
+            	<td>{{ row.0 }}</td>
+            	<td>{{ row.1 }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/v/dt/dt-1.12.1/datatables.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        let table = new DataTable('#report', {
+			lengthMenu: [ [5, 10, 25, 50, -1], [5, 10, 25, 50, "All"] ],
+			iDisplayLength: -1,
+			columnDefs: [
+    			{ type: "num", "targets": 0 },
+    			{ type: "num", "targets": 1 }
+			],
+			bPaginate: false,
+    		bLengthChange: false,
+		});
+    });
+</script>
+
+</body>
+</html>
+"#;

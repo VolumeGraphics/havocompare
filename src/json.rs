@@ -7,8 +7,8 @@ use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::Error;
 use crate::report::{DiffDetail, Difference};
+use crate::Error;
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// configuration for the json compare module

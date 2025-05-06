@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::error;
 
-use crate::{get_file_name, report};
 use crate::report::DiffDetail;
+use crate::{get_file_name, report};
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum RGBACompareMode {
