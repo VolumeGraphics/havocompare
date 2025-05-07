@@ -23,8 +23,8 @@ use vg_errortools::{fat_io_wrap_std, FatIOError};
 pub use csv::CSVCompareConfig;
 pub use hash::HashConfig;
 
+use crate::directory::DirectoryConfig;
 use crate::external::ExternalConfig;
-use crate::file_exist::FileExistConfig;
 pub use crate::html::HTMLCompareConfig;
 pub use crate::image::ImageCompareConfig;
 pub use crate::json::JsonConfig;
@@ -34,8 +34,8 @@ use crate::report::{DiffDetail, Difference};
 /// comparison module for csv comparison
 pub mod csv;
 
+mod directory;
 mod external;
-mod file_exist;
 mod hash;
 mod html;
 mod image;
@@ -107,7 +107,7 @@ pub enum ComparisonMode {
     External(ExternalConfig),
 
     /// File exists / directory structure checker
-    FileExist(FileExistConfig),
+    Directory(DirectoryConfig),
 }
 
 fn get_file_name(path: &Path) -> Option<Cow<str>> {
@@ -214,7 +214,7 @@ pub fn compare_files(
             ComparisonMode::Json(conf) => {
                 json::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
-            ComparisonMode::FileExist(conf) => {
+            ComparisonMode::Directory(conf) => {
                 let pattern = ["**/*"];
                 let exclude_pattern: Vec<String> = Vec::new();
                 let mut all_okay = true;
@@ -237,7 +237,7 @@ pub fn compare_files(
                             .into(),
                     ) //TODO: better error
                 } else {
-                    file_exist::compare_paths(nominal.as_ref(), actual.as_ref(), &n, &a, conf)
+                    directory::compare_paths(nominal.as_ref(), actual.as_ref(), &n, &a, conf)
                         .map_err(|e| e.into())
                 }
             }
@@ -305,8 +305,8 @@ fn process_rule(
 
     let mut all_okay = true;
     match &rule.file_type {
-        ComparisonMode::FileExist(config) => {
-            match file_exist::compare_paths(
+        ComparisonMode::Directory(config) => {
+            match directory::compare_paths(
                 nominal.as_ref(),
                 actual.as_ref(),
                 &nominal_cleaned_paths,

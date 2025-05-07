@@ -14,14 +14,16 @@ pub enum Error {
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
-pub struct FileExistConfig {
+pub struct DirectoryConfig {
     pub mode: Mode,
 }
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum Mode {
-    Both, // check if entry is missing in actual, and/or if entry exists in actual but not in nominal
-    Nominal, // check only if entry is missing in actual, ignoring entries that exist in actual but not in nominal
+    /// check whether both paths are really the same: whether entry is missing in actual, and/or if entry exists in actual but not in nominal
+    Identical,
+    /// check only if entry is missing in actual, ignoring entries that exist in actual but not in nominal
+    MissingOnly,
 }
 
 pub(crate) fn compare_paths<P: AsRef<Path>>(
@@ -29,7 +31,7 @@ pub(crate) fn compare_paths<P: AsRef<Path>>(
     actual: P,
     nominal_entries: &[PathBuf],
     actual_entries: &[PathBuf],
-    config: &FileExistConfig,
+    config: &DirectoryConfig,
 ) -> Result<Difference, Error> {
     let nominal_path = nominal.as_ref();
     let actual_path = actual.as_ref();
@@ -50,7 +52,7 @@ pub(crate) fn compare_paths<P: AsRef<Path>>(
     let actual_entries = actual_entries?;
 
     let mut is_the_same = true;
-    if matches!(config.mode, Mode::Both | Mode::Nominal) {
+    if matches!(config.mode, Mode::Identical | Mode::MissingOnly) {
         nominal_entries.iter().for_each(|entry| {
             let detail = if let Some(f) = actual_entries.iter().find(|a| *a == entry) {
                 (f.to_string_lossy().to_string(), false)
@@ -68,7 +70,7 @@ pub(crate) fn compare_paths<P: AsRef<Path>>(
         });
     }
 
-    if matches!(config.mode, Mode::Both) {
+    if matches!(config.mode, Mode::Identical) {
         actual_entries.iter().for_each(|entry| {
             if !nominal_entries.iter().any(|n| n == entry) {
                 difference.push_detail(DiffDetail::File {
@@ -132,7 +134,9 @@ mod test {
             actual_dir.path(),
             &nominal_entries,
             &actual_entries,
-            &FileExistConfig { mode: Mode::Both },
+            &DirectoryConfig {
+                mode: Mode::Identical,
+            },
         )
         .expect("");
 
@@ -150,7 +154,9 @@ mod test {
             actual_dir.path(),
             &nominal_entries,
             &actual_entries,
-            &FileExistConfig { mode: Mode::Both },
+            &DirectoryConfig {
+                mode: Mode::Identical,
+            },
         )
         .expect("");
 
@@ -161,8 +167,8 @@ mod test {
             actual_dir.path(),
             &nominal_entries,
             &actual_entries,
-            &FileExistConfig {
-                mode: Mode::Nominal,
+            &DirectoryConfig {
+                mode: Mode::MissingOnly,
             },
         )
         .expect("");
@@ -182,7 +188,9 @@ mod test {
             actual_dir.path(),
             &nominal_entries,
             &actual_entries,
-            &FileExistConfig { mode: Mode::Both },
+            &DirectoryConfig {
+                mode: Mode::Identical,
+            },
         )
         .expect("");
 
@@ -193,8 +201,8 @@ mod test {
             actual_dir.path(),
             &nominal_entries,
             &actual_entries,
-            &FileExistConfig {
-                mode: Mode::Nominal,
+            &DirectoryConfig {
+                mode: Mode::MissingOnly,
             },
         )
         .expect("");

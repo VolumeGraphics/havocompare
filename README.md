@@ -283,17 +283,17 @@ Compares directory structure and file existence in both paths.
 ```yaml
 rules:
   - name: "Directory Checker"
-    # to check directory structure only use "**/*/" and remove pattern_exclude
+    # to check directory structure only (ignoring the files) use "**/*/" and remove pattern_exclude
     # to check all files and directory use "**/*" and remove pattern_exclude
     # to check files only uses "**/*.*" but this works only in windows. Or use "**/*" and pattern_exclude "**/*/"
     pattern_include:
       - "**/*"
     pattern_exclude:
       - "**/*/"
-    FileExist:
-      # Mode Both to check whether entry is missing in actual, and/or if entry exists in actual but not in nominal
-      # Mode Nominal to check only if entry is missing in actual, ignoring entries that exist in actual but not in nominal
-      mode: Both
+    Directory:
+      # Mode Identical to check whether both paths are really the same: whether entry is missing in actual, and/or if entry exists in actual but not in nominal
+      # Mode MissingOnly to check only if entry is missing in actual, ignoring entries that exist in actual but not in nominal
+      mode: Identical
 ```
 
 ### Use HavoCompare in your unit-tests

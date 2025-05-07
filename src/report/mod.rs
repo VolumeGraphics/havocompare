@@ -1,7 +1,7 @@
 mod template;
 
 use crate::csv::{DiffType, Position, Table};
-use crate::file_exist::FileExistConfig;
+use crate::directory::DirectoryConfig;
 use crate::properties::MetaDataPropertyDiff;
 use crate::{CSVCompareConfig, ComparisonMode, Rule};
 use pdf_extract::extract_text;
@@ -220,11 +220,11 @@ pub fn write_html_detail(
     Ok(Some(detail_path))
 }
 
-pub fn write_file_exist_detail(
+pub fn write_directory_detail(
     nominal: impl AsRef<Path>,
     actual: impl AsRef<Path>,
     diffs: &[(&String, &String, &bool)],
-    config: &FileExistConfig,
+    config: &DirectoryConfig,
     report_dir: impl AsRef<Path>,
 ) -> Result<Option<DetailPath>, Error> {
     let detail_path = create_detail_folder(report_dir.as_ref())?;
@@ -234,7 +234,7 @@ pub fn write_file_exist_detail(
     let mut tera = Tera::default();
     tera.add_raw_template(
         &detail_file.to_string_lossy(),
-        template::FILE_EXIST_DETAIL_TEMPLATE,
+        template::DIRECTORY_DETAIL_TEMPLATE,
     )?;
 
     let mut ctx = Context::new();
@@ -852,7 +852,7 @@ pub(crate) fn create_html(
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
-                    ComparisonMode::FileExist(config) => {
+                    ComparisonMode::Directory(config) => {
                         let diffs: Vec<_> = file
                             .detail
                             .iter()
@@ -866,7 +866,7 @@ pub(crate) fn create_html(
                             })
                             .collect();
 
-                        write_file_exist_detail(
+                        write_directory_detail(
                             &file.nominal_file,
                             &file.actual_file,
                             &diffs,

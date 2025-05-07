@@ -791,7 +791,7 @@ pub const PLAIN_JSON_DETAIL_TEMPLATE: &str = r#"
 </html>
 "#;
 
-pub const FILE_EXIST_DETAIL_TEMPLATE: &str = r#"
+pub const DIRECTORY_DETAIL_TEMPLATE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -846,6 +846,10 @@ pub const FILE_EXIST_DETAIL_TEMPLATE: &str = r#"
 			white-space:pre;
 		}
 
+		.text-error {
+			color:red;
+		}
+
     </style>
 </head>
 <body>
@@ -859,6 +863,7 @@ pub const FILE_EXIST_DETAIL_TEMPLATE: &str = r#"
 	    <tr>
 	    	<th>nominal: {{ nominal }}</th>
 	    	<th>actual: {{ actual }}</th>
+	    	<th>&nbsp</th>
 	    </tr>
     </thead>
     <tbody>
@@ -866,6 +871,7 @@ pub const FILE_EXIST_DETAIL_TEMPLATE: &str = r#"
             <tr {% if row.2 %} class="error" {% endif %}>
             	<td>{{ row.0 }}</td>
             	<td>{{ row.1 }}</td>
+            	<td>{% if row.2 %}<span class="text-error">&#10006;</span> {% else %} <span style="color:green;">&#10004;</span>{% endif %}</td>
             </tr>
         {% endfor %}
     </tbody>
