@@ -166,7 +166,7 @@ pub fn create_detail_folder(report_dir: impl AsRef<Path>) -> Result<DetailPath, 
     let temp_path = tempfile::Builder::new()
         .prefix("havocompare-")
         .tempdir_in(report_dir.as_ref())?
-        .into_path();
+        .keep();
 
     let path_name = temp_path
         .file_name()

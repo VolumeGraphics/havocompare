@@ -102,35 +102,31 @@ mod test {
 
     #[test]
     fn test_compare_directories() {
-        let nominal_dir = tempfile::Builder::new()
-            .prefix("my-nominal")
-            // .keep(true)
-            .rand_bytes(1)
-            .tempdir_in("tests")
-            .expect("");
+        let nominal_dir = tempfile::tempdir().expect("Could not create nominal temp dir");
 
-        std::fs::create_dir_all(nominal_dir.path().join("dir/a/aa")).expect("");
-        std::fs::create_dir_all(nominal_dir.path().join("dir/b")).expect("");
-        std::fs::create_dir_all(nominal_dir.path().join("dir/c")).expect("");
+        std::fs::create_dir_all(nominal_dir.path().join("dir/a/aa"))
+            .expect("Could not create directory");
+        std::fs::create_dir_all(nominal_dir.path().join("dir/b"))
+            .expect("Could not create directory");
+        std::fs::create_dir_all(nominal_dir.path().join("dir/c"))
+            .expect("Could not create directory");
 
-        let actual_dir = tempfile::Builder::new()
-            .prefix("my-actual")
-            // .keep(true)
-            .rand_bytes(1)
-            .tempdir_in("tests")
-            .expect("");
+        let actual_dir = tempfile::tempdir().expect("Could not create actual temp dir");
 
-        std::fs::create_dir_all(actual_dir.path().join("dir/a/aa")).expect("");
-        std::fs::create_dir_all(actual_dir.path().join("dir/b")).expect("");
-        std::fs::create_dir_all(actual_dir.path().join("dir/c")).expect("");
+        std::fs::create_dir_all(actual_dir.path().join("dir/a/aa"))
+            .expect("Could not create directory");
+        std::fs::create_dir_all(actual_dir.path().join("dir/b"))
+            .expect("Could not create directory");
+        std::fs::create_dir_all(actual_dir.path().join("dir/c"))
+            .expect("Could not create directory");
 
         let pattern_include = ["**/*/"];
         let pattern_exclude: Vec<String> = Vec::new();
 
-        let nominal_entries =
-            crate::get_files(&nominal_dir, &pattern_include, &pattern_exclude).expect("");
-        let actual_entries =
-            crate::get_files(&actual_dir, &pattern_include, &pattern_exclude).expect("");
+        let nominal_entries = crate::get_files(&nominal_dir, &pattern_include, &pattern_exclude)
+            .expect("Could not get files");
+        let actual_entries = crate::get_files(&actual_dir, &pattern_include, &pattern_exclude)
+            .expect("Could not get files");
 
         let result = compare_paths(
             nominal_dir.path(),
@@ -141,16 +137,17 @@ mod test {
                 mode: Mode::Identical,
             },
         )
-        .expect("");
+        .expect("Could not compare paths");
 
         assert!(!result.is_error);
 
-        std::fs::create_dir_all(actual_dir.path().join("dir/d")).expect("");
+        std::fs::create_dir_all(actual_dir.path().join("dir/d"))
+            .expect("Could not create directory");
 
-        let nominal_entries =
-            crate::get_files(&nominal_dir, &pattern_include, &pattern_exclude).expect("");
-        let actual_entries =
-            crate::get_files(&actual_dir, &pattern_include, &pattern_exclude).expect("");
+        let nominal_entries = crate::get_files(&nominal_dir, &pattern_include, &pattern_exclude)
+            .expect("Could not create directory");
+        let actual_entries = crate::get_files(&actual_dir, &pattern_include, &pattern_exclude)
+            .expect("Could not create directory");
 
         let result = compare_paths(
             nominal_dir.path(),
@@ -161,7 +158,7 @@ mod test {
                 mode: Mode::Identical,
             },
         )
-        .expect("");
+        .expect("Could not compare paths");
 
         assert!(result.is_error);
 
@@ -174,17 +171,19 @@ mod test {
                 mode: Mode::MissingOnly,
             },
         )
-        .expect("");
+        .expect("Could not compare paths");
 
         assert!(!result.is_error);
 
-        std::fs::create_dir_all(nominal_dir.path().join("dir/d")).expect("");
-        std::fs::create_dir_all(nominal_dir.path().join("dir/e")).expect("");
+        std::fs::create_dir_all(nominal_dir.path().join("dir/d"))
+            .expect("Could not create directory");
+        std::fs::create_dir_all(nominal_dir.path().join("dir/e"))
+            .expect("Could not create directory");
 
-        let nominal_entries =
-            crate::get_files(&nominal_dir, &pattern_include, &pattern_exclude).expect("");
-        let actual_entries =
-            crate::get_files(&actual_dir, &pattern_include, &pattern_exclude).expect("");
+        let nominal_entries = crate::get_files(&nominal_dir, &pattern_include, &pattern_exclude)
+            .expect("Could not create directory");
+        let actual_entries = crate::get_files(&actual_dir, &pattern_include, &pattern_exclude)
+            .expect("Could not create directory");
 
         let result = compare_paths(
             nominal_dir.path(),
@@ -195,7 +194,7 @@ mod test {
                 mode: Mode::Identical,
             },
         )
-        .expect("");
+        .expect("Could not compare paths");
 
         assert!(result.is_error);
 
@@ -208,7 +207,7 @@ mod test {
                 mode: Mode::MissingOnly,
             },
         )
-        .expect("");
+        .expect("Could not compare paths");
 
         assert!(result.is_error);
     }
