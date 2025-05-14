@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::error;
 
-use crate::{get_file_name, report};
 use crate::report::DiffDetail;
+use crate::{get_file_name, report};
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum RGBACompareMode {
@@ -27,6 +27,7 @@ impl Default for RGBACompareMode {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone, Default)]
 pub enum RGBCompareMode {
     ///Comparing rgb images using structure. RGB structure similarity is performed by doing a channel split and taking the maximum deviation (minimum similarity) for the result. The image contains the complete deviations. Algorithm: RMS
@@ -38,6 +39,7 @@ pub enum RGBCompareMode {
     Hybrid,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 /// The distance algorithm to use for grayscale comparison, see
 /// https://github.com/ChrisRega/image-compare for equations
@@ -70,6 +72,7 @@ pub enum GrayCompareMode {
     Histogram(GrayHistogramCompareMetric),
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 pub enum CompareMode {
     /// Compare images as RGB

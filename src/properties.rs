@@ -80,7 +80,7 @@ fn file_modification_time_out_of_tolerance(
 ) -> Difference {
     let mut result = Difference::new_for_file(nominal, actual);
     if let (Ok(nominal_meta), Ok(actual_meta)) = (nominal.metadata(), actual.metadata()) {
-        if let (Ok(mod_time_act), Ok(mod_time_nom)) =
+        if let (Ok(mod_time_nom), Ok(mod_time_act)) =
             (nominal_meta.modified(), actual_meta.modified())
         {
             let nominal_datetime: DateTime<Utc> = mod_time_nom.into();

@@ -9,14 +9,13 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
+use schemars::schema_for;
+use schemars_derive::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-
-use schemars::schema_for;
-use schemars_derive::JsonSchema;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error, info, span};
 use vg_errortools::{fat_io_wrap_std, FatIOError};
@@ -24,6 +23,7 @@ use vg_errortools::{fat_io_wrap_std, FatIOError};
 pub use csv::CSVCompareConfig;
 pub use hash::HashConfig;
 
+use crate::directory::DirectoryConfig;
 use crate::external::ExternalConfig;
 pub use crate::html::HTMLCompareConfig;
 pub use crate::image::ImageCompareConfig;
@@ -34,6 +34,7 @@ use crate::report::{DiffDetail, Difference};
 /// comparison module for csv comparison
 pub mod csv;
 
+mod directory;
 mod external;
 mod hash;
 mod html;
@@ -57,7 +58,7 @@ pub enum Error {
     #[error("CSV module error")]
     CSVModuleError(#[from] csv::Error),
     /// An error occurred in the image rule checker
-    #[error("CSV module error")]
+    #[error("Image module error")]
     ImageModuleError(#[from] image::Error),
 
     /// An error occurred in the reporting module
@@ -104,6 +105,9 @@ pub enum ComparisonMode {
 
     /// Run external comparison executable
     External(ExternalConfig),
+
+    /// File exists / directory structure checker
+    Directory(DirectoryConfig),
 }
 
 fn get_file_name(path: &Path) -> Option<Cow<str>> {
@@ -210,6 +214,33 @@ pub fn compare_files(
             ComparisonMode::Json(conf) => {
                 json::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
             }
+            ComparisonMode::Directory(conf) => {
+                let pattern = ["**/*"];
+                let exclude_pattern: Vec<String> = Vec::new();
+                let mut all_okay = true;
+                let n =
+                    get_files(nominal.as_ref(), &pattern, &exclude_pattern).unwrap_or_else(|e| {
+                        error!("Problem with getting nominal entries {}", e);
+                        all_okay = false;
+                        Vec::new()
+                    });
+                let a =
+                    get_files(actual.as_ref(), &pattern, &exclude_pattern).unwrap_or_else(|e| {
+                        error!("Problem with getting actual entries {}", e);
+                        all_okay = false;
+                        Vec::new()
+                    });
+
+                if !all_okay {
+                    Err(
+                        Error::FilePathParsingFails("Could not parse directories".to_owned())
+                            .into(),
+                    ) //TODO: better error
+                } else {
+                    directory::compare_paths(nominal.as_ref(), actual.as_ref(), &n, &a, conf)
+                        .map_err(|e| e.into())
+                }
+            }
         }
     };
     let compare_result = match compare_result {
@@ -233,7 +264,7 @@ pub fn compare_files(
     compare_result
 }
 
-fn get_files(
+pub(crate) fn get_files(
     path: impl AsRef<Path>,
     patterns_include: &[impl AsRef<str>],
     patterns_exclude: &[impl AsRef<str>],
@@ -272,27 +303,49 @@ fn process_rule(
         get_files(nominal.as_ref(), &rule.pattern_include, exclude_patterns)?;
     let actual_cleaned_paths = get_files(actual.as_ref(), &rule.pattern_include, exclude_patterns)?;
 
-    info!(
-        "Found {} files matching includes in actual, {} files in nominal",
-        actual_cleaned_paths.len(),
-        nominal_cleaned_paths.len()
-    );
-    let actual_files = actual_cleaned_paths.len();
-    let nominal_files = nominal_cleaned_paths.len();
-
-    if actual_files != nominal_files {
-        return Err(Error::DifferentNumberOfFiles(actual_files, nominal_files));
-    }
-
     let mut all_okay = true;
-    nominal_cleaned_paths
-        .into_iter()
-        .zip(actual_cleaned_paths)
-        .for_each(|(n, a)| {
-            let compare_result = compare_files(n, a, &rule.file_type);
-            all_okay &= !compare_result.is_error;
-            compare_results.push(compare_result);
-        });
+    match &rule.file_type {
+        ComparisonMode::Directory(config) => {
+            match directory::compare_paths(
+                nominal.as_ref(),
+                actual.as_ref(),
+                &nominal_cleaned_paths,
+                &actual_cleaned_paths,
+                config,
+            ) {
+                Ok(diff) => {
+                    all_okay = !diff.is_error;
+                    compare_results.push(diff);
+                }
+                Err(e) => {
+                    error!("Problem comparing the files {}", &e);
+                    all_okay = false;
+                }
+            }
+        }
+        _ => {
+            info!(
+                "Found {} files matching includes in actual, {} files in nominal",
+                actual_cleaned_paths.len(),
+                nominal_cleaned_paths.len()
+            );
+            let actual_files = actual_cleaned_paths.len();
+            let nominal_files = nominal_cleaned_paths.len();
+
+            if actual_files != nominal_files {
+                return Err(Error::DifferentNumberOfFiles(actual_files, nominal_files));
+            }
+
+            nominal_cleaned_paths
+                .into_iter()
+                .zip(actual_cleaned_paths)
+                .for_each(|(n, a)| {
+                    let compare_result = compare_files(n, a, &rule.file_type);
+                    all_okay &= !compare_result.is_error;
+                    compare_results.push(compare_result);
+                });
+        }
+    }
 
     Ok(all_okay)
 }

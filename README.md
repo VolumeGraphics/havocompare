@@ -276,6 +276,26 @@ rules:
         - "ignore_this_key(s?)"
 ```
 
+#### File Exists / Directory Comparison
+
+Compares directory structure and file existence in both paths.
+
+```yaml
+rules:
+  - name: "Directory Checker"
+    # to check directory structure only (ignoring the files) use "**/*/" and remove pattern_exclude
+    # to check all files and directory use "**/*" and remove pattern_exclude
+    # to check files only uses "**/*.*" but this works only in windows. Or use "**/*" and pattern_exclude "**/*/"
+    pattern_include:
+      - "**/*"
+    pattern_exclude:
+      - "**/*/"
+    Directory:
+      # Mode Identical to check whether both paths are really the same: whether entry is missing in actual, and/or if entry exists in actual but not in nominal
+      # Mode MissingOnly to check only if entry is missing in actual, ignoring entries that exist in actual but not in nominal
+      mode: Identical
+```
+
 ### Use HavoCompare in your unit-tests
 
 1. Add havocompare to your dev-dependencies:
@@ -305,6 +325,12 @@ rules:
     ```
 
 ## Changelog
+
+### 0.7.0
+
+- add file exist checker
+- fix file property checker report that "Creation date" of "nominal" and "actual" columns are switched
+- update thiserror, itertools and pdf-extract crates
 
 ### 0.6.1
 

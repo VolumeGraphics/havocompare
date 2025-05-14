@@ -8,8 +8,8 @@ use thiserror::Error;
 use vg_errortools::fat_io_wrap_std;
 use vg_errortools::FatIOError;
 
-use crate::{Deserialize, report, Serialize};
 use crate::report::{DiffDetail, Difference};
+use crate::{report, Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone, Copy)]
 pub enum HashFunction {

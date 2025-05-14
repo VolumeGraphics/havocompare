@@ -1,6 +1,7 @@
 mod template;
 
 use crate::csv::{DiffType, Position, Table};
+use crate::directory::DirectoryConfig;
 use crate::properties::MetaDataPropertyDiff;
 use crate::{CSVCompareConfig, ComparisonMode, Rule};
 use pdf_extract::extract_text;
@@ -154,13 +155,18 @@ pub enum DiffDetail {
     },
     Properties(MetaDataPropertyDiff),
     Error(String),
+    File {
+        actual: String,
+        nominal: String,
+        error: bool,
+    },
 }
 
 pub fn create_detail_folder(report_dir: impl AsRef<Path>) -> Result<DetailPath, Error> {
     let temp_path = tempfile::Builder::new()
         .prefix("havocompare-")
         .tempdir_in(report_dir.as_ref())?
-        .into_path();
+        .keep();
 
     let path_name = temp_path
         .file_name()
@@ -204,6 +210,38 @@ pub fn write_html_detail(
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
 
     ctx.insert("errors", diffs);
+
+    let file = fat_io_wrap_std(&detail_file, &File::create)?;
+
+    debug!("detail html {:?} created", &detail_file);
+
+    tera.render_to(&detail_file.to_string_lossy(), &ctx, file)?;
+
+    Ok(Some(detail_path))
+}
+
+pub fn write_directory_detail(
+    nominal: impl AsRef<Path>,
+    actual: impl AsRef<Path>,
+    diffs: &[(&String, &String, &bool)],
+    config: &DirectoryConfig,
+    report_dir: impl AsRef<Path>,
+) -> Result<Option<DetailPath>, Error> {
+    let detail_path = create_detail_folder(report_dir.as_ref())?;
+
+    let detail_file = detail_path.path.join(template::DETAIL_FILENAME);
+
+    let mut tera = Tera::default();
+    tera.add_raw_template(
+        &detail_file.to_string_lossy(),
+        template::DIRECTORY_DETAIL_TEMPLATE,
+    )?;
+
+    let mut ctx = Context::new();
+    ctx.insert("actual", &actual.as_ref().to_string_lossy());
+    ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
+    ctx.insert("mode", &config.mode);
+    ctx.insert("rows", diffs);
 
     let file = fat_io_wrap_std(&detail_file, &File::create)?;
 
@@ -810,6 +848,29 @@ pub(crate) fn create_html(
                             &file.nominal_file,
                             &file.actual_file,
                             &diffs,
+                            &sub_folder,
+                        )
+                        .unwrap_or_else(|e| log_detail_html_creation_error(&e))
+                    }
+                    ComparisonMode::Directory(config) => {
+                        let diffs: Vec<_> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::File {
+                                    actual,
+                                    nominal,
+                                    error,
+                                } => Some((nominal, actual, error)),
+                                _ => None,
+                            })
+                            .collect();
+
+                        write_directory_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &diffs,
+                            config,
                             &sub_folder,
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
