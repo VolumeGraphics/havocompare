@@ -57,7 +57,7 @@ pub(crate) fn compare_paths<P: AsRef<Path>>(
             let detail = if let Some(f) = actual_entries.iter().find(|a| *a == entry) {
                 (f.to_string_lossy().to_string(), false)
             } else {
-                error!("{:?} doesn't exists in the actual folder", entry);
+                error!("{} doesn't exist in the actual folder", entry.display());
                 is_the_same = false;
                 ("".to_owned(), true)
             };
@@ -79,7 +79,10 @@ pub(crate) fn compare_paths<P: AsRef<Path>>(
                     error: true,
                 });
 
-                error!("Additional entry {:?} found in the actual folder", entry);
+                error!(
+                    "Additional entry {} found in the actual folder",
+                    entry.display()
+                );
                 is_the_same = false;
             }
         });
