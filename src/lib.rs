@@ -333,6 +333,10 @@ fn process_rule(
             let nominal_files = nominal_cleaned_paths.len();
 
             if actual_files != nominal_files {
+                error!(
+                    "Different number of files matched pattern in actual {} and nominal {}",
+                    actual_files, nominal_files
+                );
                 return Err(Error::DifferentNumberOfFiles(actual_files, nominal_files));
             }
 
@@ -374,7 +378,7 @@ pub fn compare_folders_cfg(
             let rule_name = rule.name.as_str();
 
             let result = okay.unwrap_or_else(|e| {
-                println!("Error occurred during rule-processing for rule {rule_name}: {e}");
+                error!("Error occurred during rule-processing for rule {rule_name}: {e}");
                 false
             });
             rule_results.push(report::RuleDifferences {
