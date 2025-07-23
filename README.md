@@ -326,8 +326,9 @@ rules:
 
 ## Changelog
 
-### 0.7.1
+### 0.8.0
 
+- Report will always be generated even though compare is failing.
 - Small additions: Add error message when files count don't match, use tracing::error instead of println
 - return error when:
     - folder can't be read in Directory/FileExist Checker

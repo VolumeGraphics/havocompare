@@ -29,7 +29,7 @@ pub use crate::html::HTMLCompareConfig;
 pub use crate::image::ImageCompareConfig;
 pub use crate::json::JsonConfig;
 use crate::properties::PropertiesConfig;
-use crate::report::{DiffDetail, Difference};
+use crate::report::{get_relative_path, DiffDetail, Difference};
 
 /// comparison module for csv comparison
 pub mod csv;
@@ -379,10 +379,23 @@ pub fn compare_folders_cfg(
 
             let rule_name = rule.name.as_str();
 
-            let result = okay.unwrap_or_else(|e| {
-                error!("Error occurred during rule-processing for rule {rule_name}: {e}");
-                false
-            });
+            let result = match okay {
+                Ok(res) => res,
+                Err(e) => {
+                    compare_results.push(Difference {
+                        nominal_file: nominal.as_ref().to_path_buf(),
+                        actual_file: actual.as_ref().to_path_buf(),
+                        relative_file_path: get_relative_path(actual.as_ref(), nominal.as_ref())
+                            .to_string_lossy()
+                            .to_string(),
+                        is_error: true,
+                        detail: vec![DiffDetail::Error(e.to_string())],
+                    });
+                    error!("Error occurred during rule-processing for rule {rule_name}: {e}");
+                    false
+                }
+            };
+
             rule_results.push(report::RuleDifferences {
                 rule,
                 diffs: compare_results,
