@@ -60,6 +60,9 @@ pub enum Error {
     /// An error occurred in the image rule checker
     #[error("Image module error")]
     ImageModuleError(#[from] image::Error),
+    /// An error occurred in the directory/file exists rule checker
+    #[error("Image module error")]
+    DirectoryModuleError(#[from] directory::Error),
 
     /// An error occurred in the reporting module
     #[error("Error occurred during report creation {0}")]
@@ -81,6 +84,10 @@ pub enum Error {
     /// Different number of files matched pattern in actual and nominal
     #[error("Different number of files matched pattern in actual {0} and nominal {1}")]
     DifferentNumberOfFiles(usize, usize),
+
+    /// Different number of files matched pattern in actual and nominal
+    #[error("{0} is not a directory")]
+    NotDirectory(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
@@ -217,28 +224,19 @@ pub fn compare_files(
             ComparisonMode::Directory(conf) => {
                 let pattern = ["**/*"];
                 let exclude_pattern: Vec<String> = Vec::new();
-                let mut all_okay = true;
-                let n =
-                    get_files(nominal.as_ref(), &pattern, &exclude_pattern).unwrap_or_else(|e| {
-                        error!("Problem with getting nominal entries {}", e);
-                        all_okay = false;
-                        Vec::new()
-                    });
-                let a =
-                    get_files(actual.as_ref(), &pattern, &exclude_pattern).unwrap_or_else(|e| {
-                        error!("Problem with getting actual entries {}", e);
-                        all_okay = false;
-                        Vec::new()
-                    });
-
-                if !all_okay {
-                    Err(
-                        Error::FilePathParsingFails("Could not parse directories".to_owned())
-                            .into(),
-                    ) //TODO: better error
-                } else {
-                    directory::compare_paths(nominal.as_ref(), actual.as_ref(), &n, &a, conf)
-                        .map_err(|e| e.into())
+                match get_files(nominal.as_ref(), &pattern, &exclude_pattern) {
+                    Ok(n) => match get_files(actual.as_ref(), &pattern, &exclude_pattern) {
+                        Ok(a) => directory::compare_paths(
+                            nominal.as_ref(),
+                            actual.as_ref(),
+                            &n,
+                            &a,
+                            conf,
+                        )
+                        .map_err(|e| e.into()),
+                        Err(e) => Err(e.into()),
+                    },
+                    Err(e) => Err(e.into()),
                 }
             }
         }
@@ -287,14 +285,18 @@ fn process_rule(
             "Nominal folder {} is not a folder",
             nominal.as_ref().to_string_lossy()
         );
-        return Ok(false);
+        return Err(Error::NotDirectory(
+            nominal.as_ref().to_string_lossy().to_string(),
+        ));
     }
     if !actual.as_ref().is_dir() {
         error!(
             "Actual folder {} is not a folder",
             actual.as_ref().to_string_lossy()
         );
-        return Ok(false);
+        return Err(Error::NotDirectory(
+            actual.as_ref().to_string_lossy().to_string(),
+        ));
     }
 
     let exclude_patterns = rule.pattern_exclude.as_deref().unwrap_or_default();
@@ -319,7 +321,7 @@ fn process_rule(
                 }
                 Err(e) => {
                     error!("Problem comparing the files {}", &e);
-                    all_okay = false;
+                    return Err(e.into());
                 }
             }
         }
@@ -443,7 +445,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn folder_not_found_is_false() {
+    fn folder_not_found_is_error() {
         let rule = Rule {
             name: "test rule".to_string(),
             file_type: ComparisonMode::Image(ImageCompareConfig {
@@ -454,8 +456,8 @@ mod tests {
             pattern_exclude: None,
         };
         let mut result = Vec::new();
-        assert!(!process_rule("NOT_EXISTING", ".", &rule, &mut result).unwrap());
-        assert!(!process_rule(".", "NOT_EXISTING", &rule, &mut result).unwrap());
+        assert!(process_rule("NOT_EXISTING", ".", &rule, &mut result).is_err());
+        assert!(process_rule(".", "NOT_EXISTING", &rule, &mut result).is_err());
     }
 
     #[test]

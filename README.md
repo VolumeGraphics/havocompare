@@ -329,6 +329,9 @@ rules:
 ### 0.7.1
 
 - Small additions: Add error message when files count don't match, use tracing::error instead of println
+- return error when:
+    - folder can't be read in Directory/FileExist Checker
+    - nominal and/or actual is not a folder instead of returning Ok(false)
 
 ### 0.7.0
 
