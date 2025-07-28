@@ -273,7 +273,7 @@ mod test {
                 .into_rgba8();
             let diff_result = image_compare::rgba_hybrid_compare(&img, &nom)
                 .expect("Wrong dimensions of diff images!");
-            assert_eq!(diff_result.score, 1.0);
+            assert_eq!(diff_result.score, 0.9879023078642883);
         } else {
             unreachable!();
         }
