@@ -1,10 +1,11 @@
 use crate::csv;
 use crate::csv::value::Value;
 use crate::csv::Table;
+use glob::Pattern;
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering::Equal;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 #[derive(JsonSchema, Deserialize, Serialize, Debug, Clone)]
 /// Preprocessor options
@@ -47,9 +48,7 @@ impl Preprocessor {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
             Preprocessor::DeleteColumnByName(name) => delete_column_name(table, name.as_str()),
-            Preprocessor::KeepColumnsByName(names) => {
-                keep_columns_matching_any_names(table, &names)
-            }
+            Preprocessor::KeepColumnsByName(names) => keep_columns_matching_any_names(table, names),
             Preprocessor::SortByColumnName(name) => sort_by_column_name(table, name.as_str()),
             Preprocessor::SortByColumnNumber(id) => sort_by_column_id(table, *id),
             Preprocessor::DeleteRowByNumber(id) => delete_row_by_number(table, *id),
@@ -203,11 +202,37 @@ fn keep_columns_matching_any_names(
     table: &mut Table,
     names: &Vec<String>,
 ) -> Result<(), csv::Error> {
+    let patterns: Result<Vec<Pattern>, csv::Error> = names
+        .iter()
+        .map(|name| {
+            Pattern::new(name).map_err(|e| {
+                csv::Error::InvalidAccess(format!(
+                    "Invalid glob pattern in KeepColumnsByName '{}': {}",
+                    name, e
+                ))
+            })
+        })
+        .collect();
+    let patterns = patterns?;
+
     table.columns.iter_mut().for_each(|col| {
-        if !(names
-            .iter()
-            .any(|name| col.header.as_deref().unwrap_or_default() == name))
-        {
+        let header = col.header.as_deref().unwrap_or_default();
+        if !(names.iter().zip(patterns.iter()).any(|(name, pattern)| {
+            // Try exact match first, then glob pattern
+            if header == name {
+                info!("Keep header: \"{}\" (exact match)", header);
+                true
+            } else if pattern.matches(header) {
+                info!("Keep header: \"{}\" (matches: \"{}\")", header, name);
+                true
+            } else {
+                false
+            }
+        })) {
+            // info!(
+            //     "Discard column: \"{}\"",
+            //     col.header.as_deref().unwrap_or_default()
+            // );
             col.delete_contents();
         }
     });
@@ -352,6 +377,35 @@ mod tests {
         assert!(table
             .columns
             .last()
+            .unwrap()
+            .rows
+            .iter()
+            .all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_matching_glob_patterns() {
+        let mut table = setup_table(None);
+        // column headers in test table: "Deviation [mm]", "Surface [mm²]"
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec![
+            "Surface*"  // Should match "Surface [mm²]" via glob pattern
+        ];
+        keep_columns_matching_any_names(&mut table, &keep_names).unwrap();
+        assert_eq!(
+            table.columns.first().unwrap().header.as_deref().unwrap(),
+            "DELETED",
+            "First column (Deviation) should be deleted as it doesn't match pattern!"
+        );
+        assert_eq!(
+            table.columns.last().unwrap().header.as_deref().unwrap(),
+            "Surface [mm²]",
+            "Second column (Surface) was deleted, although it matches the glob pattern!",
+        );
+        assert!(table
+            .columns
+            .first()
             .unwrap()
             .rows
             .iter()
