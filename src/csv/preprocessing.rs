@@ -15,6 +15,8 @@ pub enum Preprocessor {
     DeleteColumnByNumber(usize),
     /// Replace all fields in column by name by a deleted marker
     DeleteColumnByName(String),
+    /// Replace with deleted marker: all fields in all columns that do not match any of the specified name
+    KeepColumnsByName(Vec<String>),
     /// Sort rows by column with given name. Fails if no headers were extracted or column name is not found, or if any row has no numbers there
     SortByColumnName(String),
     /// Sort rows by column with given number. Fails if any row has no numbers there or if out of bounds.
@@ -45,6 +47,9 @@ impl Preprocessor {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
             Preprocessor::DeleteColumnByName(name) => delete_column_name(table, name.as_str()),
+            Preprocessor::KeepColumnsByName(names) => {
+                keep_columns_matching_any_names(table, &names)
+            }
             Preprocessor::SortByColumnName(name) => sort_by_column_name(table, name.as_str()),
             Preprocessor::SortByColumnNumber(id) => sort_by_column_id(table, *id),
             Preprocessor::DeleteRowByNumber(id) => delete_row_by_number(table, *id),
@@ -194,6 +199,21 @@ fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
     Ok(())
 }
 
+fn keep_columns_matching_any_names(
+    table: &mut Table,
+    names: &Vec<String>,
+) -> Result<(), csv::Error> {
+    table.columns.iter_mut().for_each(|col| {
+        if !(names
+            .iter()
+            .any(|name| col.header.as_deref().unwrap_or_default() == name))
+        {
+            col.delete_contents();
+        }
+    });
+    Ok(())
+}
+
 fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
     debug!("Extracting headers...");
     let can_extract = table
@@ -221,6 +241,10 @@ mod tests {
     use super::*;
     use crate::csv::{Column, Delimiters, Error};
     use std::fs::File;
+
+    macro_rules! string_vec {
+        ($($x:expr),*) => (vec![$($x.to_string()),*]);
+    }
 
     fn setup_table(delimiters: Option<Delimiters>) -> Table {
         let delimiters = delimiters.unwrap_or_default();
@@ -294,6 +318,36 @@ mod tests {
         assert_eq!(
             table.columns.last().unwrap().header.as_deref().unwrap(),
             "DELETED"
+        );
+        assert!(table
+            .columns
+            .last()
+            .unwrap()
+            .rows
+            .iter()
+            .all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_matching_any_names() {
+        let mut table = setup_table(None);
+        // column headers in test table: "Deviation [mm]", "Surface [mm²]"
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec![
+            "Deviation [mm]",
+            "Any name to be kept, which is no table header -> no effect"
+        ];
+        keep_columns_matching_any_names(&mut table, &keep_names).unwrap();
+        assert_eq!(
+            table.columns.first().unwrap().header.as_deref().unwrap(),
+            "Deviation [mm]",
+            "First column was deleted, although it is in the list of names to be kept!"
+        );
+        assert_eq!(
+            table.columns.last().unwrap().header.as_deref().unwrap(),
+            "DELETED",
+            "Second column was not deleted, although it is not in the list of names to be kept!",
         );
         assert!(table
             .columns
