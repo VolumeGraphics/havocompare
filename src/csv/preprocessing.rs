@@ -183,7 +183,7 @@ fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> 
 fn delete_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
     let pattern = Pattern::new(name).map_err(|e| {
         csv::Error::InvalidAccess(format!(
-            "Invalid glob pattern in KeepColumnsByName '{}': {}",
+            "Invalid glob pattern in DeleteColumnByName '{}': {}",
             name, e
         ))
     })?;
@@ -204,10 +204,7 @@ fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
     Ok(())
 }
 
-fn keep_columns_matching_any_names(
-    table: &mut Table,
-    names: &Vec<String>,
-) -> Result<(), csv::Error> {
+fn keep_columns_matching_any_names(table: &mut Table, names: &[String]) -> Result<(), csv::Error> {
     let patterns: Result<Vec<Pattern>, csv::Error> = names
         .iter()
         .map(|name| {
