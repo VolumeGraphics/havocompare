@@ -29,7 +29,7 @@ jobs:
     - name: Run grcov
       env:
          PROJECT_NAME: "havocompare"
-         RUSTFLAGS: "-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+         RUSTFLAGS: "-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off"
          CARGO_INCREMENTAL: 0
       run: |
          cargo +stable build --verbose
