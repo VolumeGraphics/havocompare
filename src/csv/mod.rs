@@ -313,13 +313,13 @@ impl Table {
         Ok(Table { columns: cols })
     }
 
-    pub(crate) fn rows(&self) -> RowIterator {
+    pub(crate) fn rows(&self) -> RowIterator<'_> {
         RowIterator {
             position: self.columns.iter().map(|c| c.rows.iter()).collect(),
         }
     }
 
-    pub(crate) fn rows_mut(&mut self) -> RowIteratorMut {
+    pub(crate) fn rows_mut(&mut self) -> RowIteratorMut<'_> {
         RowIteratorMut {
             position: self.columns.iter_mut().map(|c| c.rows.iter_mut()).collect(),
         }
