@@ -16,8 +16,12 @@ pub enum Preprocessor {
     DeleteColumnByNumber(usize),
     /// Replace all fields in column by name by a deleted marker
     DeleteColumnByName(String),
+    /// Replace all fields in column whose header matches a glob pattern by a deleted marker
+    DeleteColumnByNameG(String),
     /// Replace with deleted marker: all fields in all columns that do not match any of the specified name
     KeepColumnsByName(Vec<String>),
+    /// Replace with deleted marker: all fields in all columns that do not match any of the specified glob patterns
+    KeepColumnsByNameG(Vec<String>),
     /// Sort rows by column with given name. Fails if no headers were extracted or column name is not found, or if any row has no numbers there
     SortByColumnName(String),
     /// Sort rows by column with given number. Fails if any row has no numbers there or if out of bounds.
@@ -48,7 +52,13 @@ impl Preprocessor {
             Preprocessor::ExtractHeaders => extract_headers(table),
             Preprocessor::DeleteColumnByNumber(id) => delete_column_number(table, *id),
             Preprocessor::DeleteColumnByName(name) => delete_column_name(table, name.as_str()),
+            Preprocessor::DeleteColumnByNameG(name) => {
+                delete_column_name_glob(table, name.as_str())
+            }
             Preprocessor::KeepColumnsByName(names) => keep_columns_matching_any_names(table, names),
+            Preprocessor::KeepColumnsByNameG(names) => {
+                keep_columns_matching_any_names_glob(table, names)
+            }
             Preprocessor::SortByColumnName(name) => sort_by_column_name(table, name.as_str()),
             Preprocessor::SortByColumnNumber(id) => sort_by_column_id(table, *id),
             Preprocessor::DeleteRowByNumber(id) => delete_row_by_number(table, *id),
@@ -181,9 +191,20 @@ fn sort_by_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> 
 }
 
 fn delete_column_name(table: &mut Table, name: &str) -> Result<(), csv::Error> {
+    if let Some(c) = table
+        .columns
+        .iter_mut()
+        .find(|col| col.header.as_deref().unwrap_or_default() == name)
+    {
+        c.delete_contents();
+    }
+    Ok(())
+}
+
+fn delete_column_name_glob(table: &mut Table, name: &str) -> Result<(), csv::Error> {
     let pattern = Pattern::new(name).map_err(|e| {
         csv::Error::InvalidAccess(format!(
-            "Invalid glob pattern in DeleteColumnByName '{}': {}",
+            "Invalid glob pattern in DeleteColumnByNameG '{}': {}",
             name, e
         ))
     })?;
@@ -205,12 +226,27 @@ fn delete_column_number(table: &mut Table, id: usize) -> Result<(), csv::Error> 
 }
 
 fn keep_columns_matching_any_names(table: &mut Table, names: &[String]) -> Result<(), csv::Error> {
+    table.columns.iter_mut().for_each(|col| {
+        let header = col.header.as_deref().unwrap_or_default();
+        if names.iter().any(|name| header == name) {
+            info!("Keep header: \"{}\" (exact match)", header);
+        } else {
+            col.delete_contents();
+        }
+    });
+    Ok(())
+}
+
+fn keep_columns_matching_any_names_glob(
+    table: &mut Table,
+    names: &[String],
+) -> Result<(), csv::Error> {
     let patterns: Result<Vec<Pattern>, csv::Error> = names
         .iter()
         .map(|name| {
             Pattern::new(name).map_err(|e| {
                 csv::Error::InvalidAccess(format!(
-                    "Invalid glob pattern in KeepColumnsByName '{}': {}",
+                    "Invalid glob pattern in KeepColumnsByNameG '{}': {}",
                     name, e
                 ))
             })
@@ -221,7 +257,6 @@ fn keep_columns_matching_any_names(table: &mut Table, names: &[String]) -> Resul
     table.columns.iter_mut().for_each(|col| {
         let header = col.header.as_deref().unwrap_or_default();
         if !(names.iter().zip(patterns.iter()).any(|(name, pattern)| {
-            // Try exact match first, then glob pattern
             if header == name {
                 info!("Keep header: \"{}\" (exact match)", header);
                 true
@@ -232,10 +267,6 @@ fn keep_columns_matching_any_names(table: &mut Table, names: &[String]) -> Resul
                 false
             }
         })) {
-            // info!(
-            //     "Discard column: \"{}\"",
-            //     col.header.as_deref().unwrap_or_default()
-            // );
             col.delete_contents();
         }
     });
@@ -399,6 +430,24 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_column_by_name_glob() {
+        let mut table = setup_table(None);
+        extract_headers(&mut table).unwrap();
+        delete_column_name_glob(&mut table, "Surface*").unwrap();
+        assert_eq!(
+            table.columns.last().unwrap().header.as_deref().unwrap(),
+            "DELETED"
+        );
+        assert!(table
+            .columns
+            .last()
+            .unwrap()
+            .rows
+            .iter()
+            .all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
     fn test_keep_columns_matching_any_names() {
         let mut table = setup_table(None);
         // column headers in test table: "Deviation [mm]", "Surface [mm²]"
@@ -437,7 +486,7 @@ mod tests {
         let keep_names = string_vec![
             "Surface*"  // Should match "Surface [mm²]" via glob pattern
         ];
-        keep_columns_matching_any_names(&mut table, &keep_names).unwrap();
+        keep_columns_matching_any_names_glob(&mut table, &keep_names).unwrap();
         assert_eq!(
             table.columns.first().unwrap().header.as_deref().unwrap(),
             "DELETED",
@@ -655,5 +704,457 @@ mod tests {
                 .get_string(),
             None
         );
+    }
+
+    // Tests for PR #58 - Column filtering with exact match and glob patterns
+    //
+    // BEHAVIOR DOCUMENTATION & AMBIGUITIES FOUND:
+    //
+    // 1. DeleteColumnByName and DeleteColumnByNameG use find() which deletes only the FIRST matching column.
+    //    - If multiple columns have the same name, only the first is deleted
+    //    - PR reviewer (TheAdiWijaya) suggested using filter() instead to delete ALL matches
+    //    - Why not "just fix it"?
+    //      i.e. changing the behavior DeleteColumnByName* so that it removes ALL columns:
+    //      - Workaround (feature?) exists: if 2,3,... identical columns "foo" in the CSV are actually
+    //        intended behavior of the AUT, then the tester can add 2,3,... identical
+    //        `DeleteColumnByName: "foo"` steps.
+    //      - debatable behavior (feature or bug) is already released
+    //      - singular in "DeleteColumnByName" implies deleting only one column
+    //      - any existing test out there, using "DeleteColumnByName", would in general delete more columns
+    //        and become less sensitive in a very implicit way when just upgrading havocompare.
+    //    - Current tests document the FIRST-MATCH-ONLY behavior
+    //
+    // 2. DeleteColumnByNameG "exact match priority" is ambiguous:
+    //    - PR says "first try exact match, then glob pattern"
+    //    - Current implementation: find() returns first column matching (exact OR glob) by position
+    //    - Example: pattern "Center *" with columns ["Center x [mm]", "Center y [mm]", "Center *"]
+    //      deletes "Center x [mm]" (first glob match), NOT "Center *" (exact match at position 3)
+    //    - Alternative interpretation: search for exact match first, if none found, then search by glob
+    //    - This needs clarification from the PR author
+    //
+    // 3. KeepColumnsByName and KeepColumnsByNameG work correctly:
+    //    - They iterate ALL columns and keep those matching any pattern (exact or glob)
+    //    - Multiple columns with same name are all kept
+    //    - This behavior matches the PR description examples
+
+    #[test]
+    fn test_delete_column_by_name_deletes_first_match_only() {
+        // According to PR description: DeleteColumnByName deletes the first column that exactly matches
+        let content = "Center x [mm];Center y [mm];Center z [mm];Center x [mm];Center x\n1;2;3;4;5";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        delete_column_name(&mut table, "Center x [mm]").unwrap();
+
+        // First "Center x [mm]" should be deleted
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "DELETED",
+            "First 'Center x [mm]' should be deleted"
+        );
+        assert!(table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        // Second "Center x [mm]" should still exist
+        assert_eq!(
+            table.columns[3].header.as_deref().unwrap(),
+            "Center x [mm]",
+            "Second 'Center x [mm]' should NOT be deleted (only first match)"
+        );
+        assert!(!table.columns[3].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_delete_column_by_name_glob_deletes_first_match() {
+        // AMBIGUITY DETECTED: PR says "first try exact match, then glob pattern"
+        // Current implementation uses find() which returns FIRST column matching (exact OR glob)
+        // When pattern "Center *" is used, it matches "Center x [mm]" (glob) before "Center *" (exact)
+        // This test documents CURRENT behavior - may need clarification if prioritization is intended
+        let content = "Center x [mm];Center y [mm];Center z [mm];Center *\n1;2;3;4";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        // Pattern "Center *" as glob matches "Center x [mm]" first
+        delete_column_name_glob(&mut table, "Center *").unwrap();
+
+        // Current behavior: deletes first match by position (glob match on column 0)
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "DELETED",
+            "First column matching glob 'Center *' should be deleted"
+        );
+        assert!(table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        // The exact match "Center *" at column 3 is NOT deleted (only first match)
+        assert_eq!(
+            table.columns[3].header.as_deref().unwrap(),
+            "Center *",
+            "Exact match is not deleted because first glob match was found first"
+        );
+        assert!(!table.columns[3].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_delete_column_by_name_glob_pattern_match() {
+        let content = "Center x [mm];Center y [mm];Center z [mm];Other column\n1;2;3;4";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        delete_column_name_glob(&mut table, "Center *").unwrap();
+
+        // First match by glob should be deleted
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "DELETED",
+            "First column matching 'Center *' glob should be deleted"
+        );
+        assert!(table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        // Other columns that match should NOT be deleted (only first match with find())
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "Center y [mm]",
+            "Second matching column should NOT be deleted"
+        );
+    }
+
+    #[test]
+    fn test_delete_column_by_name_glob_square_brackets() {
+        // According to PR: Square brackets in glob are wildcards (match 'u' OR 'm')
+        // So exact match should be tried first to handle "[mm]" correctly
+        let content = "Value [mm];Value [um];Value m;Value u\n1;2;3;4";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        // Without exact match fallback, "[um]" would match "Value u" or "Value m"
+        delete_column_name_glob(&mut table, "Value [mm]").unwrap();
+
+        // Should delete exact match "Value [mm]"
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "DELETED",
+            "Exact match 'Value [mm]' should be deleted"
+        );
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_example_from_pr() {
+        // Example from PR #58
+        let content = "Center x [mm];Center y [mm];Center z [mm];any other string;Center x [mm];Center x\n1;2;3;4;5;6";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["Center x [mm]", "Center y [mm]"];
+        keep_columns_matching_any_names(&mut table, &keep_names).unwrap();
+
+        // First two columns should be kept (exact matches)
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "Center x [mm]",
+            "First column should be kept"
+        );
+        assert!(!table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "Center y [mm]",
+            "Second column should be kept"
+        );
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+
+        // Third column should be deleted
+        assert_eq!(
+            table.columns[2].header.as_deref().unwrap(),
+            "DELETED",
+            "Center z [mm] should be deleted"
+        );
+        assert!(table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+
+        // Fourth column should be deleted
+        assert_eq!(
+            table.columns[3].header.as_deref().unwrap(),
+            "DELETED",
+            "any other string should be deleted"
+        );
+        assert!(table.columns[3].rows.iter().all(|v| *v == Value::deleted()));
+
+        // Fifth column (duplicate "Center x [mm]") should be kept
+        assert_eq!(
+            table.columns[4].header.as_deref().unwrap(),
+            "Center x [mm]",
+            "Second 'Center x [mm]' should also be kept"
+        );
+        assert!(!table.columns[4].rows.iter().all(|v| *v == Value::deleted()));
+
+        // Sixth column should be deleted
+        assert_eq!(
+            table.columns[5].header.as_deref().unwrap(),
+            "DELETED",
+            "Center x (without [mm]) should be deleted"
+        );
+        assert!(table.columns[5].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_glob_with_wildcard() {
+        // Example from PR: "Center *" should match "Center x [mm]", "Center y [mm]", "Center _"
+        let content = "Center x [mm];Center y [mm];Center _;Other column\n1;2;3;4";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["Center *"];
+        keep_columns_matching_any_names_glob(&mut table, &keep_names).unwrap();
+
+        // All "Center *" columns should be kept
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "Center x [mm]",
+            "Center x [mm] should match glob"
+        );
+        assert!(!table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "Center y [mm]",
+            "Center y [mm] should match glob"
+        );
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+
+        assert_eq!(
+            table.columns[2].header.as_deref().unwrap(),
+            "Center _",
+            "Center _ should match glob"
+        );
+        assert!(!table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Other column" should be deleted
+        assert_eq!(
+            table.columns[3].header.as_deref().unwrap(),
+            "DELETED",
+            "Other column should be deleted"
+        );
+        assert!(table.columns[3].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_glob_question_mark_wildcard() {
+        // Example from PR: "Center ? [mm]" does NOT match "Center x [mm]"
+        // because ? matches single char and space is a char
+        let content = "Center x [mm];Center  [mm];Centerx[mm]\n1;2;3";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["Center ? [mm]"];
+        keep_columns_matching_any_names_glob(&mut table, &keep_names).unwrap();
+
+        // "Center x [mm]" has space+x before [mm], so doesn't match single char '?'
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "DELETED",
+            "Center x [mm] should NOT match 'Center ? [mm]' pattern"
+        );
+        assert!(table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Center  [mm]" has space+space before [mm], so doesn't match single char '?'
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "DELETED",
+            "Center  [mm] should NOT match 'Center ? [mm]' pattern"
+        );
+
+        // "Centerx[mm]" has no space, so doesn't match
+        assert_eq!(
+            table.columns[2].header.as_deref().unwrap(),
+            "DELETED",
+            "Centerx[mm] should NOT match 'Center ? [mm]' pattern"
+        );
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_glob_exact_match_takes_priority() {
+        // Verify that exact match is tried before glob pattern
+        let content = "Center *;Center x;Center y\n1;2;3";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["Center *"];
+        keep_columns_matching_any_names_glob(&mut table, &keep_names).unwrap();
+
+        // "Center *" should be kept (exact match)
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "Center *",
+            "Exact match 'Center *' should be kept"
+        );
+        assert!(!table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Center x" should also be kept (glob match)
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "Center x",
+            "Center x should match glob pattern"
+        );
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Center y" should also be kept (glob match)
+        assert_eq!(
+            table.columns[2].header.as_deref().unwrap(),
+            "Center y",
+            "Center y should match glob pattern"
+        );
+        assert!(!table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_glob_square_brackets_as_wildcard() {
+        // According to PR: [um] matches 'u' OR 'm'
+        // But exact match should be tried first
+        let content = "Value [mm];Value u;Value m;Value [um]\n1;2;3;4";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["Value [mm]"];
+        keep_columns_matching_any_names_glob(&mut table, &keep_names).unwrap();
+
+        // "Value [mm]" should be kept (exact match takes priority)
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "Value [mm]",
+            "Exact match 'Value [mm]' should be kept"
+        );
+        assert!(!table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Value u" should also be kept (glob [mm] matches 'm' at that position)
+        // Wait - this would only work if the glob was "Value [um]" not "Value [mm]"
+        // Let's check if "Value u" matches glob pattern "Value [mm]"
+        // [mm] means 'm' OR 'm', so it matches single 'm'
+        // "Value u" doesn't have 'm' at position after "Value ", so it shouldn't match
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "DELETED",
+            "Value u should NOT match 'Value [mm]' glob"
+        );
+
+        // "Value m" should be kept if glob [mm] at that position matches 'm'
+        assert_eq!(
+            table.columns[2].header.as_deref().unwrap(),
+            "Value m",
+            "Value m should match glob 'Value [mm]' (first 'm' in brackets)"
+        );
+        assert!(!table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_multiple_patterns() {
+        // Test with multiple patterns in the list
+        let content = "Column A;Column B;Data X;Data Y;Other\n1;2;3;4;5";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["Column *", "Data X"];
+        keep_columns_matching_any_names_glob(&mut table, &keep_names).unwrap();
+
+        // "Column A" and "Column B" should match first pattern
+        assert_eq!(table.columns[0].header.as_deref().unwrap(), "Column A");
+        assert!(!table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+
+        assert_eq!(table.columns[1].header.as_deref().unwrap(), "Column B");
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Data X" should match second pattern (exact)
+        assert_eq!(table.columns[2].header.as_deref().unwrap(), "Data X");
+        assert!(!table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Data Y" should be deleted (doesn't match any pattern)
+        assert_eq!(table.columns[3].header.as_deref().unwrap(), "DELETED");
+        assert!(table.columns[3].rows.iter().all(|v| *v == Value::deleted()));
+
+        // "Other" should be deleted
+        assert_eq!(table.columns[4].header.as_deref().unwrap(), "DELETED");
+        assert!(table.columns[4].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_empty_list() {
+        // Empty list should delete all columns
+        let content = "Column A;Column B;Column C\n1;2;3";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names: Vec<String> = vec![];
+        keep_columns_matching_any_names(&mut table, &keep_names).unwrap();
+
+        // All columns should be deleted
+        assert!(table.columns.iter().all(|col| {
+            col.header.as_deref().unwrap() == "DELETED"
+                && col.rows.iter().all(|v| *v == Value::deleted())
+        }));
+    }
+
+    #[test]
+    fn test_delete_column_by_name_nonexistent() {
+        // Deleting non-existent column should succeed (no-op)
+        let content = "Column A;Column B\n1;2";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        delete_column_name(&mut table, "Nonexistent").unwrap();
+
+        // Both columns should still exist
+        assert_eq!(table.columns[0].header.as_deref().unwrap(), "Column A");
+        assert!(!table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+        assert_eq!(table.columns[1].header.as_deref().unwrap(), "Column B");
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_delete_column_by_name_header_occurs_twice_only_first_column_deleted() {
+        // Deleting non-existent column should succeed (no-op)
+        let content = "Column A;Column B;Column A\n1;2;3";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        delete_column_name(&mut table, "Column A").unwrap();
+
+        // Only first column should be deleted
+        assert_eq!(table.columns[0].header.as_deref().unwrap(), "DELETED");
+        assert!(table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+        assert_eq!(table.columns[1].header.as_deref().unwrap(), "Column B");
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+        assert_eq!(table.columns[2].header.as_deref().unwrap(), "Column A");
+        assert!(!table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+
+        delete_column_name(&mut table, "Column A").unwrap();
+        // Now the 2nd "Column A" should be deleted as well.
+        assert_eq!(table.columns[0].header.as_deref().unwrap(), "DELETED");
+        assert!(table.columns[0].rows.iter().all(|v| *v == Value::deleted()));
+        assert_eq!(table.columns[1].header.as_deref().unwrap(), "Column B");
+        assert!(!table.columns[1].rows.iter().all(|v| *v == Value::deleted()));
+        assert_eq!(table.columns[2].header.as_deref().unwrap(), "DELETED");
+        assert!(table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_delete_column_by_name_glob_invalid_pattern() {
+        // Invalid glob pattern should return error
+        let content = "Column A;Column B\n1;2";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let result = delete_column_name_glob(&mut table, "[invalid");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::InvalidAccess(_)));
+    }
+
+    #[test]
+    fn test_keep_columns_by_name_glob_invalid_pattern() {
+        // Invalid glob pattern should return error
+        let content = "Column A;Column B\n1;2";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        let keep_names = string_vec!["[invalid"];
+        let result = keep_columns_matching_any_names_glob(&mut table, &keep_names);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::InvalidAccess(_)));
     }
 }
