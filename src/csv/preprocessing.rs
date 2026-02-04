@@ -268,7 +268,7 @@ fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
 mod tests {
     use super::*;
     use crate::csv::{Column, Delimiters, Error};
-    use std::fs::File;
+    use std::{fs::File, io::Cursor};
 
     macro_rules! string_vec {
         ($($x:expr),*) => (vec![$($x.to_string()),*]);
@@ -279,6 +279,20 @@ mod tests {
         Table::from_reader(
             File::open("tests/csv/data/DeviationHistogram.csv").unwrap(),
             &delimiters,
+        )
+        .unwrap()
+    }
+
+    /// Helper function to create a Table from CSV string content for testing
+    fn table_from_string(content: &str) -> Table {
+        let cursor = Cursor::new(content.as_bytes());
+
+        Table::from_reader(
+            cursor,
+            &Delimiters {
+                field_delimiter: Some(';'),
+                decimal_separator: Some('.'),
+            },
         )
         .unwrap()
     }
@@ -304,6 +318,34 @@ mod tests {
             table.columns.last().unwrap().header.as_deref().unwrap(),
             "Radius"
         );
+    }
+
+    #[test]
+    fn test_extract_headers_from_string() {
+        let content = "Header1;Header2;Header3\nValue1;Value2;Value3";
+        let mut table = table_from_string(content);
+
+        assert_eq!(table.columns.len(), 3);
+        assert!(table.columns[0].header.is_none());
+
+        extract_headers(&mut table).unwrap();
+
+        assert_eq!(table.columns[0].header.as_deref().unwrap(), "Header1");
+        assert_eq!(table.columns[1].header.as_deref().unwrap(), "Header2");
+        assert_eq!(table.columns[2].header.as_deref().unwrap(), "Header3");
+        assert_eq!(table.columns[0].rows.len(), 1); // One row remaining after header extraction
+    }
+
+    #[test]
+    fn test_extract_headers_fails_with_numbers() {
+        let content = "1.5;2.5;3.5\nValue1;Value2;Value3";
+        let mut table = table_from_string(content);
+
+        // Should not extract headers when first row contains numbers
+        extract_headers(&mut table).unwrap();
+
+        assert!(table.columns[0].header.is_none());
+        assert_eq!(table.columns[0].rows.len(), 2); // Both rows still present
     }
 
     #[test]
