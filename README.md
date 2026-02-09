@@ -326,6 +326,13 @@ rules:
 
 ## Changelog
 
+### 0.9.0
+
+- **Breaking**: Minimum supported Rust version (MSRV) is now 1.85
+- Internal/CI:
+  - Switch GitHub CI from `nightly` to `stable` Rust toolchain
+  - Fix clippy warnings for Rust 1.93+
+
 ### 0.8.0
 
 - Report will always be generated even though compare is failing.
