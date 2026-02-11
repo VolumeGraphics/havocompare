@@ -117,7 +117,7 @@ pub enum ComparisonMode {
     Directory(DirectoryConfig),
 }
 
-fn get_file_name(path: &Path) -> Option<Cow<str>> {
+fn get_file_name(path: &Path) -> Option<Cow<'_, str>> {
     path.file_name().map(|f| f.to_string_lossy())
 }
 

@@ -88,10 +88,10 @@ impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             Value::Quantity(val) => {
-                write!(f, "{val}").unwrap();
+                let _ = write!(f, "{val}");
             }
             Value::String(val) => {
-                write!(f, "'{val}'").unwrap();
+                let _ = write!(f, "'{val}'");
             }
         }
         Ok(())
@@ -143,7 +143,7 @@ impl Value {
         }
     }
 
-    pub fn as_str(&self) -> Cow<str> {
+    pub fn as_str(&self) -> Cow<'_, str> {
         match self {
             Value::String(str) => str.as_str().into(),
             Value::Quantity(quant) => quant.to_string().into(),

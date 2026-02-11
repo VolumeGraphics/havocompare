@@ -187,7 +187,7 @@ pub(crate) struct Parser<R: Read + Seek> {
     delimiters: Delimiters,
 }
 
-fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token>, Error> {
+fn tokenize(input: &str, field_sep: char) -> Result<Vec<Token<'_>>, Error> {
     let mut tokens = Vec::new();
     let mut pos = 0;
     while let Some(remainder) = &input.get(pos..) {
@@ -228,7 +228,7 @@ fn parse_literal(
     field_sep: char,
     remainder: &str,
     literal_type: LiteralTerminator,
-) -> Result<(usize, Token, bool), Error> {
+) -> Result<(usize, Token<'_>, bool), Error> {
     let terminator_len = literal_type.get_char().len_utf8();
     let after_first_quote = &remainder[terminator_len..];
     let quote_end =

@@ -411,7 +411,7 @@ pub fn write_image_detail(
     ctx.insert("actual", &actual.as_ref().to_string_lossy());
     ctx.insert("nominal", &nominal.as_ref().to_string_lossy());
 
-    fn get_file_name(path: &Path) -> Result<Cow<str>, Error> {
+    fn get_file_name(path: &Path) -> Result<Cow<'_, str>, Error> {
         path.file_name()
             .map(|f| f.to_string_lossy())
             .ok_or_else(|| {
@@ -612,11 +612,7 @@ pub fn write_error_detail(
     errors: &[&String],
     report_dir: impl AsRef<Path>,
 ) -> Option<DetailPath> {
-    if let Ok(sub_folder) = create_error_detail(nominal, actual, errors, report_dir) {
-        Some(sub_folder)
-    } else {
-        None
-    }
+    create_error_detail(nominal, actual, errors, report_dir).ok()
 }
 
 pub(crate) fn create_reports(
