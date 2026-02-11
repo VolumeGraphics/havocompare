@@ -210,8 +210,8 @@ fn delete_column_name_glob(table: &mut Table, name: &str) -> Result<(), csv::Err
     })?;
 
     if let Some(c) = table.columns.iter_mut().find(|col| {
-        col.header.as_deref().unwrap_or_default() == name
-            || pattern.matches(col.header.as_deref().unwrap_or_default())
+        let header = col.header.as_deref().unwrap_or_default();
+        header != "DELETED" && (header == name || pattern.matches(header))
     }) {
         c.delete_contents();
     }
@@ -791,6 +791,45 @@ mod tests {
             "Exact match is not deleted because first glob match was found first"
         );
         assert!(!table.columns[3].rows.iter().all(|v| *v == Value::deleted()));
+    }
+
+    #[test]
+    fn test_delete_column_by_name_glob_twice_does_not_rematch_deleted() {
+        // Scenario: columns ["Data A", "Data B", "Other"], call DeleteColumnByNameG("D*") twice.
+        // Step 1 should delete "Data A", step 2 should delete "Data B".
+        // Bug: "D*" also matches "DELETED", so step 2 re-matches the already-deleted column.
+        let content = "Data A;Data B;Other\n1;2;3";
+        let mut table = table_from_string(content);
+        extract_headers(&mut table).unwrap();
+
+        // First call: should delete "Data A" (first match left-to-right)
+        delete_column_name_glob(&mut table, "D*").unwrap();
+        assert_eq!(
+            table.columns[0].header.as_deref().unwrap(),
+            "DELETED",
+            "First call should delete 'Data A'"
+        );
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "Data B",
+            "'Data B' should survive the first call"
+        );
+
+        // Second call: should delete "Data B" (next match), NOT re-match "DELETED"
+        delete_column_name_glob(&mut table, "D*").unwrap();
+        assert_eq!(
+            table.columns[1].header.as_deref().unwrap(),
+            "DELETED",
+            "Second call should delete 'Data B', not re-match the already-deleted column"
+        );
+
+        // "Other" should be untouched
+        assert_eq!(
+            table.columns[2].header.as_deref().unwrap(),
+            "Other",
+            "'Other' should not be affected"
+        );
+        assert!(!table.columns[2].rows.iter().all(|v| *v == Value::deleted()));
     }
 
     #[test]
