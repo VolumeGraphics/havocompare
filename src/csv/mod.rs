@@ -529,7 +529,7 @@ mod tests {
     use crate::csv::DiffType::{
         DifferentValueTypes, OutOfTolerance, UnequalHeader, UnequalStrings,
     };
-    use crate::csv::Preprocessor::ExtractHeaders;
+    use crate::csv::Preprocessor::*;
     use std::io::Cursor;
 
     const NOMINAL: &str = "nominal";
@@ -1000,5 +1000,83 @@ mod tests {
         for mode in modes {
             assert!(mode.in_tolerance(&quantity1, &quantity2));
         }
+    }
+
+    #[test]
+    fn test_get_diffs_readers_nominal_actual_are_identical() {
+        let nominal = Cursor::new("Pos. x [mm]; Pos. y [mm]; Radius;\n 0.5; 0.1; 2.5;");
+        let actual = Cursor::new("Pos. x [mm]; Pos. y [mm]; Radius;\n 0.5; 0.1; 2.5;");
+        let config = CSVCompareConfig {
+            preprocessing: Some(vec![]),
+            exclude_field_regex: None,
+            comparison_modes: vec![Mode::Absolute(0.01)],
+            delimiters: Delimiters::default(),
+        };
+        let result = get_diffs_readers(nominal, actual, &config).unwrap().2;
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_get_diffs_readers_nominal_actual_1_cell_above_absolute_threshold() {
+        let nominal = Cursor::new("Pos. x [mm]; Pos. y [mm]; Radius;\n 0.5; 0.10; 2.5;");
+        let actual = Cursor::new("Pos. x [mm]; Pos. y [mm]; Radius;\n 0.5; 0.12; 2.5;");
+        let config = CSVCompareConfig {
+            preprocessing: Some(vec![]),
+            exclude_field_regex: None,
+            comparison_modes: vec![Mode::Absolute(0.01)],
+            delimiters: Delimiters::default(),
+        };
+        let result = get_diffs_readers(nominal, actual, &config).unwrap().2;
+        assert!(result.len() == 1);
+        let first_diff = result.first().unwrap();
+        match first_diff {
+            OutOfTolerance {
+                nominal,
+                actual,
+                mode: _,
+                position,
+            } => {
+                assert_eq!(nominal.value, 0.10);
+                assert_eq!(actual.value, 0.12);
+                assert_eq!(position.col, 1);
+                assert_eq!(position.row, 1);
+            }
+            _ => {
+                println!("test did not find value difference above threshold!");
+                assert!(false);
+            }
+        }
+    }
+
+    fn preprocessor_DeleteColumnByNameG(glob: &str) -> Vec<Preprocessor> {
+        return vec![ExtractHeaders, DeleteColumnByNameG(glob.to_string())];
+    }
+
+    #[test]
+    fn test_get_diffs_readers_cell_above_absolute_threshold_but_is_deleted_by_glob() {
+        let nominal = Cursor::new("Pos. x [mm];Pos. y [mm]; Radius;\n 0.5; 0.10; 2.5;");
+        let actual = Cursor::new("Pos. x [mm];Pos. y [mm]; Radius;\n 0.5; 0.12; 2.5;");
+        let config = CSVCompareConfig {
+            preprocessing: Some(preprocessor_DeleteColumnByNameG("Pos. y [[]*[]]")),
+            exclude_field_regex: None,
+            comparison_modes: vec![Mode::Absolute(0.01)],
+            delimiters: Delimiters::default(),
+        };
+        let result = get_diffs_readers(nominal, actual, &config).unwrap().2;
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_get_diffs_readers_finds_diff_number_of_columns_mismatch_before_keep_column_by_glob() {
+        let nominal = Cursor::new("Pos. x [mm];Pos. y [mm]; Radius;\n 0.5; 0.10; 2.5;");
+        let actual = Cursor::new("Pos. x [mm];Pos. y [mm]; Radius;\n 0.5; 0.12; 2.5;");
+        let config = CSVCompareConfig {
+            preprocessing: Some(vec![KeepColumnsByNameG(vec!["Pos*".to_string()])]),
+            exclude_field_regex: None,
+            comparison_modes: vec![Mode::Absolute(0.01)],
+            delimiters: Delimiters::default(),
+        };
+        let result = get_diffs_readers(nominal, actual, &config).unwrap().2;
+        assert!(result.is_empty());
     }
 }
