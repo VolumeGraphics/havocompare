@@ -298,8 +298,9 @@ fn extract_headers(table: &mut Table) -> Result<(), csv::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::csv::test_utils::*;
     use crate::csv::{Column, Delimiters, Error};
-    use std::{fs::File, io::Cursor};
+    use std::fs::File;
 
     macro_rules! string_vec {
         ($($x:expr),*) => (vec![$($x.to_string()),*]);
@@ -310,20 +311,6 @@ mod tests {
         Table::from_reader(
             File::open("tests/csv/data/DeviationHistogram.csv").unwrap(),
             &delimiters,
-        )
-        .unwrap()
-    }
-
-    /// Helper function to create a Table from CSV string content for testing
-    fn table_from_string(content: &str) -> Table {
-        let cursor = Cursor::new(content.as_bytes());
-
-        Table::from_reader(
-            cursor,
-            &Delimiters {
-                field_delimiter: Some(';'),
-                decimal_separator: Some('.'),
-            },
         )
         .unwrap()
     }

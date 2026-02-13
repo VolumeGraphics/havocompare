@@ -1,5 +1,7 @@
 use crate::report;
 mod preprocessing;
+#[cfg(test)]
+mod test_utils;
 mod tokenizer;
 mod value;
 
