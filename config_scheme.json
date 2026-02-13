@@ -326,6 +326,24 @@
           "additionalProperties": false
         },
         {
+          "description": "Replace with deleted marker: all fields in all columns that do not match any of the specified name",
+          "type": "object",
+          "required": [
+            "KeepColumnsByName"
+          ],
+          "properties": {
+            "KeepColumnsByName": {
+              "type": [
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
           "description": "Sort rows by column with given name. Fails if no headers were extracted or column name is not found, or if any row has no numbers there",
           "type": "object",
           "required": [
