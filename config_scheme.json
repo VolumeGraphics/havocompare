@@ -589,6 +589,19 @@
           "additionalProperties": false
         },
         {
+          "description": "plain text compare",
+          "type": "object",
+          "required": [
+            "PlainText"
+          ],
+          "properties": {
+            "PlainText": {
+              "$ref": "#/definitions/HTMLCompareConfig"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
           "description": "Compare using file hashes",
           "type": "object",
           "required": [

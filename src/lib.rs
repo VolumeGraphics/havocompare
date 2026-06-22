@@ -30,6 +30,7 @@ pub use crate::image::ImageCompareConfig;
 pub use crate::json::JsonConfig;
 use crate::properties::PropertiesConfig;
 use crate::report::{get_relative_path, DiffDetail, Difference};
+pub use crate::xml_compare::XMLCompareConfig;
 
 /// comparison module for csv comparison
 pub mod csv;
@@ -39,11 +40,11 @@ mod external;
 mod hash;
 mod html;
 mod image;
+mod json;
 mod pdf;
 mod properties;
 mod report;
-
-mod json;
+mod xml_compare;
 
 #[derive(Error, Debug)]
 /// Top-Level Error class for all errors that can happen during havocompare-running
@@ -100,19 +101,18 @@ pub enum ComparisonMode {
     Image(ImageCompareConfig),
     /// plain text compare
     PlainText(HTMLCompareConfig),
+    /// xml compare
+    XMLCompare(XMLCompareConfig),
     /// Compare using file hashes
     Hash(HashConfig),
     /// PDF text compare
     PDFText(HTMLCompareConfig),
     /// Compare file-properties
     FileProperties(PropertiesConfig),
-
     /// Compare JSON files
     Json(JsonConfig),
-
     /// Run external comparison executable
     External(ExternalConfig),
-
     /// File exists / directory structure checker
     Directory(DirectoryConfig),
 }
@@ -203,6 +203,10 @@ pub fn compare_files(
             }
             ComparisonMode::PlainText(conf) => {
                 html::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())
+            }
+            ComparisonMode::XMLCompare(conf) => {
+                xml_compare::compare_files(nominal.as_ref(), actual.as_ref(), conf)
+                    .map_err(|e| e.into())
             }
             ComparisonMode::Hash(conf) => {
                 hash::compare_files(nominal.as_ref(), actual.as_ref(), conf).map_err(|e| e.into())

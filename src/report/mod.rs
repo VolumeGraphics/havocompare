@@ -731,6 +731,32 @@ pub(crate) fn create_html(
                         )
                         .unwrap_or_else(|e| log_detail_html_creation_error(&e))
                     }
+                    ComparisonMode::XMLCompare(_) => {
+                        let diffs: Vec<String> = file
+                            .detail
+                            .iter()
+                            .filter_map(|r| match r {
+                                DiffDetail::Text {
+                                    score,
+                                    actual,
+                                    nominal,
+                                    ..
+                                } => Some(format!(
+                                    "Mismatch in XML. Expected: '{}' found '{}' (diff: {})",
+                                    nominal, actual, score
+                                )),
+                                _ => None,
+                            })
+                            .collect();
+
+                        write_html_detail(
+                            &file.nominal_file,
+                            &file.actual_file,
+                            &diffs,
+                            &sub_folder,
+                        )
+                        .unwrap_or_else(|e| log_detail_html_creation_error(&e))
+                    }
                     ComparisonMode::PDFText(_) => {
                         let diffs: Vec<(&usize, String)> =
                             file.detail
