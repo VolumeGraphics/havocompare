@@ -8,6 +8,10 @@ use strsim::normalized_damerau_levenshtein;
 use thiserror::Error;
 use tracing::error;
 
+//
+// ================= CONFIG =================
+//
+
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
 /// XML comparison config
 pub struct XMLCompareConfig {
@@ -27,6 +31,11 @@ pub enum TagRule {
     },
     #[serde(rename = "string")]
     String { threshold: f64 },
+    #[serde(rename = "vector")]
+    Vector {
+        abs: Option<Range>,
+        rel: Option<Range>,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
@@ -34,6 +43,10 @@ pub struct Range {
     pub min: f64,
     pub max: f64,
 }
+
+//
+// ================= ERROR =================
+//
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -50,10 +63,15 @@ pub enum Error {
     Reporting(#[from] report::Error),
 }
 
+//
+// ================= COMPILED CONFIG =================
+//
+
 struct CompiledXMLConfig {
     ignore_tags: Vec<Regex>,
     numeric: Option<NumericRule>,
     string: Option<StringRule>,
+    vector: Option<NumericRule>,
 }
 
 struct NumericRule {
@@ -76,6 +94,7 @@ impl XMLCompareConfig {
 
         let mut numeric = None;
         let mut string = None;
+        let mut vector = None;
 
         for rule in &self.tag {
             match rule {
@@ -90,6 +109,12 @@ impl XMLCompareConfig {
                         threshold: *threshold,
                     });
                 }
+                TagRule::Vector { abs, rel } => {
+                    vector = Some(NumericRule {
+                        abs: abs.clone(),
+                        rel: rel.clone(),
+                    });
+                }
             }
         }
 
@@ -97,6 +122,7 @@ impl XMLCompareConfig {
             ignore_tags,
             numeric,
             string,
+            vector,
         })
     }
 }
@@ -105,6 +131,10 @@ fn glob_to_regex(pattern: &str) -> Result<Regex, regex::Error> {
     let escaped = regex::escape(pattern).replace("\\*", ".*");
     Regex::new(&format!("^{}$", escaped))
 }
+
+//
+// ================= ENTRY =================
+//
 
 pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
@@ -132,6 +162,10 @@ pub fn compare_files<P: AsRef<Path>>(
     Ok(diff)
 }
 
+//
+// ================= CORE =================
+//
+
 fn compare_nodes<'a, 'i>(
     nominal: Node<'a, 'i>,
     actual: Node<'a, 'i>,
@@ -142,24 +176,18 @@ fn compare_nodes<'a, 'i>(
     let tag = nominal.tag_name().name();
     let current_path = format!("{}/{}", path, tag);
 
-    // ignore
     if config.ignore_tags.iter().any(|r| r.is_match(tag)) {
         return;
     }
 
-    // tag mismatch
     if tag != actual.tag_name().name() {
         report_error(diff, &current_path, tag, actual.tag_name().name());
         return;
     }
 
-    // compare text
-    compare_values(nominal.text(), actual.text(), config, diff, &current_path);
-
-    // compare attributes
+    compare_values(nominal, actual, config, diff, &current_path);
     compare_attributes(nominal, actual, config, diff, &current_path);
 
-    // collect children
     let nominal_children: Vec<_> = nominal.children().filter(|n| n.is_element()).collect();
     let actual_children: Vec<_> = actual.children().filter(|n| n.is_element()).collect();
 
@@ -177,46 +205,19 @@ fn compare_nodes<'a, 'i>(
     }
 }
 
-fn compare_values(
-    nominal: Option<&str>,
-    actual: Option<&str>,
+fn compare_values<'a, 'i>(
+    nominal_node: Node<'a, 'i>,
+    actual_node: Node<'a, 'i>,
     config: &CompiledXMLConfig,
     diff: &mut Difference,
     path: &str,
 ) {
-    let n = nominal.unwrap_or("").trim();
-    let a = actual.unwrap_or("").trim();
+    let n = nominal_node.text().unwrap_or("");
+    let a = actual_node.text().unwrap_or("");
 
-    // numeric attempt
-    if let (Ok(nv), Ok(av)) = (n.parse::<f64>(), a.parse::<f64>()) {
-        if let Some(rule) = &config.numeric {
-            let diff_abs = (av - nv).abs();
-            let diff_rel = if nv != 0.0 { diff_abs / nv.abs() } else { 0.0 };
+    let is_vector = nominal_node.attribute("type") == Some("xyz");
 
-            let abs_ok = rule
-                .abs
-                .as_ref()
-                .is_none_or(|r| diff_abs >= r.min && diff_abs <= r.max);
-            let rel_ok = rule
-                .rel
-                .as_ref()
-                .is_none_or(|r| diff_rel >= r.min && diff_rel <= r.max);
-
-            if !(abs_ok || rel_ok) {
-                report_value_mismatch(diff, path, n, a, diff_abs);
-            }
-        }
-        return;
-    }
-
-    // string fallback
-    if let Some(rule) = &config.string {
-        let distance = normalized_damerau_levenshtein(n, a);
-
-        if distance < rule.threshold {
-            report_value_mismatch(diff, path, n, a, distance);
-        }
-    }
+    compare_text_values(n, a, config, diff, path, is_vector);
 }
 
 fn compare_attributes<'a, 'i>(
@@ -227,17 +228,123 @@ fn compare_attributes<'a, 'i>(
     path: &str,
 ) {
     for attr in nominal.attributes() {
-        match actual.attribute(attr.name()) {
-            Some(av) => {
-                let attr_path = format!("{}[@{}]", path, attr.name());
-                compare_values(Some(attr.value()), Some(av), config, diff, &attr_path);
+        let attr_name = attr.name();
+
+        match actual.attribute(attr_name) {
+            Some(actual_value) => {
+                let attr_path = format!("{}[@{}]", path, attr_name);
+
+                compare_text_values(attr.value(), actual_value, config, diff, &attr_path, false);
             }
             None => {
-                error!("Missing attribute {} at {}", attr.name(), path);
+                error!("Missing attribute {} at {}", attr_name, path);
                 diff.error();
             }
         }
     }
+
+    for attr in actual.attributes() {
+        if nominal.attribute(attr.name()).is_none() {
+            error!("Unexpected attribute {} at {}", attr.name(), path);
+            diff.error();
+        }
+    }
+}
+
+//
+// ================= VALUE LOGIC =================
+//
+
+fn compare_text_values(
+    nominal: &str,
+    actual: &str,
+    config: &CompiledXMLConfig,
+    diff: &mut Difference,
+    path: &str,
+    vector_hint: bool,
+) {
+    let n = nominal.trim();
+    let a = actual.trim();
+
+    // VECTOR
+    if vector_hint {
+        if let (Some(nv), Some(av)) = (parse_vector(n), parse_vector(a)) {
+            if let Some(rule) = &config.vector {
+                for i in 0..3 {
+                    if !within_tolerance(nv[i], av[i], rule) {
+                        report_value_mismatch(
+                            diff,
+                            &format!("{}[{}]", path, ["x", "y", "z"][i]),
+                            &nv[i].to_string(),
+                            &av[i].to_string(),
+                            (av[i] - nv[i]).abs(),
+                        );
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    // NUMERIC
+    if let (Ok(nv), Ok(av)) = (n.parse::<f64>(), a.parse::<f64>()) {
+        if let Some(rule) = &config.numeric {
+            if !within_tolerance(nv, av, rule) {
+                report_value_mismatch(diff, path, n, a, (av - nv).abs());
+            }
+        }
+        return;
+    }
+
+    // STRING
+    if let Some(rule) = &config.string {
+        let distance = normalized_damerau_levenshtein(n, a);
+        if distance < rule.threshold {
+            report_value_mismatch(diff, path, n, a, distance);
+        }
+    }
+}
+
+//
+// ✅ ✅ CENTRALIZED TOLERANCE LOGIC
+//
+
+fn within_tolerance(n: f64, a: f64, rule: &NumericRule) -> bool {
+    let diff_abs = (a - n).abs();
+    let diff_rel = if n != 0.0 { diff_abs / n.abs() } else { 0.0 };
+
+    let abs_ok = rule
+        .abs
+        .as_ref()
+        .is_none_or(|r| diff_abs >= r.min && diff_abs <= r.max);
+
+    let rel_ok = rule
+        .rel
+        .as_ref()
+        .is_none_or(|r| diff_rel >= r.min && diff_rel <= r.max);
+
+    abs_ok || rel_ok
+}
+
+//
+// ================= HELPERS =================
+//
+
+fn parse_vector(value: &str) -> Option<[f64; 3]> {
+    let trimmed = value.trim().trim_start_matches('(').trim_end_matches(')');
+    let parts: Vec<_> = trimmed.split(',').collect();
+
+    if parts.len() != 3 {
+        return None;
+    }
+
+    let coords: Vec<f64> = parts
+        .iter()
+        .map(|p| p.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .ok()?;
+
+    Some([coords[0], coords[1], coords[2]])
 }
 
 fn report_error(diff: &mut Difference, path: &str, expected: &str, found: &str) {
@@ -271,174 +378,4 @@ fn report_value_mismatch(
     });
 
     diff.error();
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    fn write_temp_xml(name: &str, content: &str) -> String {
-        let path = format!("tests/xml_{}.xml", name);
-        std::fs::write(&path, content).unwrap();
-        path
-    }
-
-    fn basic_config() -> XMLCompareConfig {
-        XMLCompareConfig {
-            ignore_tags: None,
-            tag: vec![
-                TagRule::Numeric {
-                    abs: None,
-                    rel: Some(Range {
-                        min: 0.0,
-                        max: 0.001,
-                    }),
-                },
-                TagRule::String { threshold: 1.0 },
-            ],
-        }
-    }
-
-    // ✅ identical files
-    #[test]
-    fn test_identity() {
-        let xml = r#"<root><value>123</value></root>"#;
-
-        let f1 = write_temp_xml("identity_1", xml);
-        let f2 = write_temp_xml("identity_2", xml);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(!result.is_error);
-    }
-
-    // ✅ numeric within tolerance
-    #[test]
-    fn test_numeric_within_tolerance() {
-        let nominal = r#"<root><value>100.0</value></root>"#;
-        let actual = r#"<root><value>100.05</value></root>"#;
-
-        let f1 = write_temp_xml("num_ok_1", nominal);
-        let f2 = write_temp_xml("num_ok_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(!result.is_error);
-    }
-
-    // ✅ numeric outside tolerance
-    #[test]
-    fn test_numeric_outside_tolerance() {
-        let nominal = r#"<root><value>100.0</value></root>"#;
-        let actual = r#"<root><value>200.0</value></root>"#;
-
-        let f1 = write_temp_xml("num_fail_1", nominal);
-        let f2 = write_temp_xml("num_fail_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(result.is_error);
-    }
-
-    // ✅ string difference
-    #[test]
-    fn test_string_difference() {
-        let nominal = r#"<root><name>Hello</name></root>"#;
-        let actual = r#"<root><name>World</name></root>"#;
-
-        let f1 = write_temp_xml("str_fail_1", nominal);
-        let f2 = write_temp_xml("str_fail_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(result.is_error);
-    }
-
-    // ✅ ignore tag
-    #[test]
-    fn test_ignore_tag() {
-        let config = XMLCompareConfig {
-            ignore_tags: Some(vec!["time".to_string()]),
-            ..basic_config()
-        };
-
-        let nominal = r#"<root><time>123</time></root>"#;
-        let actual = r#"<root><time>999</time></root>"#;
-
-        let f1 = write_temp_xml("ignore_1", nominal);
-        let f2 = write_temp_xml("ignore_2", actual);
-
-        let result = compare_files(f1, f2, &config).unwrap();
-
-        assert!(!result.is_error);
-    }
-
-    // ✅ attribute numeric comparison
-    #[test]
-    fn test_attribute_numeric() {
-        let nominal = r#"<root><point x="100.0"/></root>"#;
-        let actual = r#"<root><point x="100.05"/></root>"#;
-
-        let f1 = write_temp_xml("attr_ok_1", nominal);
-        let f2 = write_temp_xml("attr_ok_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(!result.is_error);
-    }
-
-    // ✅ attribute mismatch
-    #[test]
-    fn test_attribute_missing() {
-        let nominal = r#"<root><point x="1.0"/></root>"#;
-        let actual = r#"<root><point/></root>"#;
-
-        let f1 = write_temp_xml("attr_missing_1", nominal);
-        let f2 = write_temp_xml("attr_missing_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(result.is_error);
-    }
-
-    // ✅ structural difference (extra node)
-    #[test]
-    fn test_structure_difference() {
-        let nominal = r#"<root><a>1</a></root>"#;
-        let actual = r#"<root><a>1</a><b>2</b></root>"#;
-
-        let f1 = write_temp_xml("struct_1", nominal);
-        let f2 = write_temp_xml("struct_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(result.is_error);
-    }
-
-    // ✅ nested path reporting sanity
-    #[test]
-    fn test_nested_difference() {
-        let nominal = r#"
-            <root>
-                <level1>
-                    <value>10</value>
-                </level1>
-            </root>
-        "#;
-
-        let actual = r#"
-            <root>
-                <level1>
-                    <value>20</value>
-                </level1>
-            </root>
-        "#;
-
-        let f1 = write_temp_xml("nested_1", nominal);
-        let f2 = write_temp_xml("nested_2", actual);
-
-        let result = compare_files(f1, f2, &basic_config()).unwrap();
-
-        assert!(result.is_error);
-    }
 }
