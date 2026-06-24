@@ -35,9 +35,16 @@ pub enum TagRule {
     String { threshold: f64 },
     #[serde(rename = "vector")]
     Vector {
-        abs: Option<Range>,
-        rel: Option<Range>,
+        x: Option<AxisRule>,
+        y: Option<AxisRule>,
+        z: Option<AxisRule>,
     },
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
+pub struct AxisRule {
+    pub abs: Option<Range>,
+    pub rel: Option<Range>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
@@ -46,12 +53,59 @@ pub struct Range {
     pub max: f64,
 }
 
+impl Range {
+    fn validate(&self) -> Result<(), XMLCompareError> {
+        if self.min > self.max {
+            return Err(XMLCompareError::InvalidRange {
+                min: self.min,
+                max: self.max,
+            });
+        }
+
+        if self.min < 0.0 || self.max < 0.0 {
+            return Err(XMLCompareError::NegativeRange {
+                min: self.min,
+                max: self.max,
+            });
+        }
+
+        Ok(())
+    }
+}
+
+impl NumericRule {
+    fn validate(&self) -> Result<(), XMLCompareError> {
+        if let Some(abs) = &self.abs {
+            abs.validate()?;
+        }
+
+        if let Some(rel) = &self.rel {
+            rel.validate()?;
+        }
+
+        Ok(())
+    }
+}
+
+impl VectorRule {
+    fn validate(&self) -> Result<(), XMLCompareError> {
+        for (i, axis) in self.axes.iter().enumerate() {
+            axis.validate().map_err(|e| {
+                tracing::error!("Invalid vector axis [{}]: {}", ["x", "y", "z"][i], e);
+                e
+            })?;
+        }
+
+        Ok(())
+    }
+}
+
 //
 // ================= ERROR =================
 //
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum XMLCompareError {
     #[error("XML parse error: {0}")]
     ParseFailure(#[from] roxmltree::Error),
 
@@ -63,6 +117,15 @@ pub enum Error {
 
     #[error("Reporting error: {0}")]
     Reporting(#[from] report::Error),
+
+    #[error("Invalid vector config: missing axes (x={x}, y={y}, z={z})")]
+    InvalidVectorConfigDetailed { x: bool, y: bool, z: bool },
+
+    #[error("Invalid range: min ({min}) > max ({max})")]
+    InvalidRange { min: f64, max: f64 },
+
+    #[error("Invalid range: values must be non-negative (min={min}, max={max})")]
+    NegativeRange { min: f64, max: f64 },
 }
 
 //
@@ -73,7 +136,7 @@ struct CompiledXMLConfig {
     ignore_tags: Vec<Regex>,
     numeric: Option<NumericRule>,
     string: Option<StringRule>,
-    vector: Option<NumericRule>,
+    vector: Option<VectorRule>,
     invalid_tag_patterns: Vec<(Regex, Regex, String)>,
 }
 
@@ -86,8 +149,12 @@ struct StringRule {
     threshold: f64,
 }
 
+struct VectorRule {
+    axes: [NumericRule; 3],
+}
+
 impl XMLCompareConfig {
-    fn compile(&self) -> Result<CompiledXMLConfig, regex::Error> {
+    fn compile(&self) -> Result<CompiledXMLConfig, XMLCompareError> {
         let ignore_tags = self
             .ignore_tags
             .as_ref()
@@ -102,26 +169,56 @@ impl XMLCompareConfig {
         for rule in &self.tag {
             match rule {
                 TagRule::Numeric { abs, rel } => {
-                    numeric = Some(NumericRule {
+                    let rule = NumericRule {
                         abs: abs.clone(),
                         rel: rel.clone(),
-                    });
+                    };
+
+                    rule.validate()?;
+
+                    numeric = Some(rule);
                 }
                 TagRule::String { threshold } => {
                     string = Some(StringRule {
                         threshold: *threshold,
                     });
                 }
-                TagRule::Vector { abs, rel } => {
-                    vector = Some(NumericRule {
-                        abs: abs.clone(),
-                        rel: rel.clone(),
-                    });
+                TagRule::Vector { x, y, z } => {
+                    let (x, y, z) = match (x, y, z) {
+                        (Some(x), Some(y), Some(z)) => (x, y, z),
+                        _ => {
+                            return Err(XMLCompareError::InvalidVectorConfigDetailed {
+                                x: x.is_some(),
+                                y: y.is_some(),
+                                z: z.is_some(),
+                            });
+                        }
+                    };
+
+                    let rule = VectorRule {
+                        axes: [
+                            NumericRule {
+                                abs: x.abs.clone(),
+                                rel: x.rel.clone(),
+                            },
+                            NumericRule {
+                                abs: y.abs.clone(),
+                                rel: y.rel.clone(),
+                            },
+                            NumericRule {
+                                abs: z.abs.clone(),
+                                rel: z.rel.clone(),
+                            },
+                        ],
+                    };
+
+                    rule.validate()?;
+
+                    vector = Some(rule);
                 }
             }
         }
 
-        // ✅ NEW: compile invalid tags
         let mut invalid_tag_patterns = Vec::new();
 
         if let Some(tags) = &self.invalid_tags {
@@ -158,7 +255,7 @@ pub fn compare_files<P: AsRef<Path>>(
     nominal_path: P,
     actual_path: P,
     config: &XMLCompareConfig,
-) -> Result<Difference, Error> {
+) -> Result<Difference, XMLCompareError> {
     let nominal_text = std::fs::read_to_string(&nominal_path)?;
     let actual_text = std::fs::read_to_string(&actual_path)?;
     let compiled = config.compile()?;
@@ -291,7 +388,8 @@ fn compare_text_values(
         if let (Some(nv), Some(av)) = (parse_vector(n), parse_vector(a)) {
             if let Some(rule) = &config.vector {
                 for i in 0..3 {
-                    if !within_tolerance(nv[i], av[i], rule) {
+                    let axis_rule = &rule.axes[i];
+                    if !within_tolerance(nv[i], av[i], axis_rule) {
                         report_value_mismatch(
                             diff,
                             &format!("{}[{}]", path, ["x", "y", "z"][i]),
@@ -331,19 +429,23 @@ fn compare_text_values(
 
 fn within_tolerance(n: f64, a: f64, rule: &NumericRule) -> bool {
     let diff_abs = (a - n).abs();
-    let diff_rel = if n != 0.0 { diff_abs / n.abs() } else { 0.0 };
+    let diff_rel = if n != 0.0 {
+        diff_abs / n.abs()
+    } else {
+        diff_abs
+    };
 
-    let abs_ok = rule
-        .abs
-        .as_ref()
-        .is_none_or(|r| diff_abs >= r.min && diff_abs <= r.max);
+    const EPS: f64 = 1e-12;
 
-    let rel_ok = rule
-        .rel
-        .as_ref()
-        .is_none_or(|r| diff_rel >= r.min && diff_rel <= r.max);
-
-    abs_ok || rel_ok
+    match (&rule.abs, &rule.rel) {
+        (Some(abs), Some(rel)) => {
+            (diff_abs >= abs.min && diff_abs <= abs.max)
+                || (diff_rel >= rel.min && diff_rel <= rel.max)
+        }
+        (Some(abs), None) => diff_abs >= abs.min && diff_abs <= abs.max,
+        (None, Some(rel)) => diff_rel >= rel.min && diff_rel <= rel.max,
+        (None, None) => (n - a).abs() <= EPS,
+    }
 }
 
 //
