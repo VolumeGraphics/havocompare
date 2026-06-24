@@ -19,6 +19,8 @@ pub struct XMLCompareConfig {
     pub ignore_tags: Option<Vec<String>>,
     /// Rules for different tag types
     pub tag: Vec<TagRule>,
+    /// Tags are not XML conform (i.e start in number)
+    pub invalid_tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema, Clone)]
@@ -72,6 +74,7 @@ struct CompiledXMLConfig {
     numeric: Option<NumericRule>,
     string: Option<StringRule>,
     vector: Option<NumericRule>,
+    invalid_tag_patterns: Vec<(Regex, Regex, String)>,
 }
 
 struct NumericRule {
@@ -118,11 +121,26 @@ impl XMLCompareConfig {
             }
         }
 
+        // ✅ NEW: compile invalid tags
+        let mut invalid_tag_patterns = Vec::new();
+
+        if let Some(tags) = &self.invalid_tags {
+            for tag in tags {
+                let tag_escaped = regex::escape(tag);
+
+                let open = Regex::new(&format!(r"<\s*{}(\s|>)", tag_escaped))?;
+                let close = Regex::new(&format!(r"</\s*{}\s*>", tag_escaped))?;
+
+                invalid_tag_patterns.push((open, close, tag.clone()));
+            }
+        }
+
         Ok(CompiledXMLConfig {
             ignore_tags,
             numeric,
             string,
             vector,
+            invalid_tag_patterns,
         })
     }
 }
@@ -143,11 +161,13 @@ pub fn compare_files<P: AsRef<Path>>(
 ) -> Result<Difference, Error> {
     let nominal_text = std::fs::read_to_string(&nominal_path)?;
     let actual_text = std::fs::read_to_string(&actual_path)?;
+    let compiled = config.compile()?;
+
+    let nominal_text = normalize_invalid_tags(&nominal_text, &compiled);
+    let actual_text = normalize_invalid_tags(&actual_text, &compiled);
 
     let nominal_doc = Document::parse(&nominal_text)?;
     let actual_doc = Document::parse(&actual_text)?;
-
-    let compiled = config.compile()?;
 
     let mut diff = Difference::new_for_file(nominal_path, actual_path);
 
@@ -306,7 +326,7 @@ fn compare_text_values(
 }
 
 //
-// ✅ ✅ CENTRALIZED TOLERANCE LOGIC
+// CENTRALIZED TOLERANCE LOGIC
 //
 
 fn within_tolerance(n: f64, a: f64, rule: &NumericRule) -> bool {
@@ -378,4 +398,30 @@ fn report_value_mismatch(
     });
 
     diff.error();
+}
+
+fn normalize_invalid_tags(input: &str, config: &CompiledXMLConfig) -> String {
+    if config.invalid_tag_patterns.is_empty() {
+        return input.to_string();
+    }
+
+    let mut output = input.to_string();
+
+    for (open_re, close_re, tag) in &config.invalid_tag_patterns {
+        let prefixed = if tag.starts_with('_') {
+            tag.clone()
+        } else {
+            format!("_{}", tag)
+        };
+
+        output = open_re
+            .replace_all(&output, format!("<{}$1", prefixed).as_str())
+            .to_string();
+
+        output = close_re
+            .replace_all(&output, format!("</{}>", prefixed).as_str())
+            .to_string();
+    }
+
+    output
 }
