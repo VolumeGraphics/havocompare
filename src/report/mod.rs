@@ -202,6 +202,84 @@ pub enum XMLDiffKind {
     },
 }
 
+use std::fmt;
+
+impl fmt::Display for XMLDiffKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            XMLDiffKind::Numeric {
+                diff_abs,
+                diff_rel,
+                abs_range,
+                rel_range,
+                failed_on,
+            } => {
+                write!(
+                    f,
+                    "Numeric mismatch\n  abs diff: {}\n  rel diff: {}\n  failed on: {:?}",
+                    diff_abs, diff_rel, failed_on
+                )?;
+
+                if let Some(abs) = abs_range {
+                    write!(f, "\n  abs range: [{}, {}]", abs.min, abs.max)?;
+                }
+
+                if let Some(rel) = rel_range {
+                    write!(f, "\n  rel range: [{}, {}]", rel.min, rel.max)?;
+                }
+
+                Ok(())
+            }
+
+            XMLDiffKind::Vector {
+                axis,
+                diff_abs,
+                diff_rel,
+                abs_range,
+                rel_range,
+                failed_on,
+            } => {
+                write!(
+                    f,
+                    "Vector mismatch (axis {})\n  abs diff: {}\n  rel diff: {}\n  failed on: {:?}",
+                    axis, diff_abs, diff_rel, failed_on
+                )?;
+
+                if let Some(abs) = abs_range {
+                    write!(f, "\n  abs range: [{}, {}]", abs.min, abs.max)?;
+                }
+
+                if let Some(rel) = rel_range {
+                    write!(f, "\n  rel range: [{}, {}]", rel.min, rel.max)?;
+                }
+
+                Ok(())
+            }
+
+            XMLDiffKind::String {
+                similarity,
+                threshold,
+            } => write!(
+                f,
+                "String mismatch\n  similarity: {}\n  threshold: {}",
+                similarity, threshold
+            ),
+
+            XMLDiffKind::TagMismatch { expected, found } => write!(
+                f,
+                "Tag mismatch\n  expected: {}\n  found: {}",
+                expected, found
+            ),
+
+            XMLDiffKind::AttributeMissing { name } => write!(f, "Missing attribute '{}'", name),
+
+            XMLDiffKind::AttributeUnexpected { name } => {
+                write!(f, "Unexpected attribute '{}'", name)
+            }
+        }
+    }
+}
+
 #[derive(Serialize, Debug, Clone)]
 pub enum FailureKind {
     Absolute,
@@ -784,15 +862,16 @@ pub(crate) fn create_html(
                             .detail
                             .iter()
                             .filter_map(|r| match r {
-                                DiffDetail::Text {
-                                    score,
-                                    actual,
+                                DiffDetail::XML {
+                                    path,
                                     nominal,
-                                    ..
+                                    actual,
+                                    kind,
                                 } => Some(format!(
-                                    "Mismatch in XML. Expected: '{}' found '{}' (diff: {})",
-                                    nominal, actual, score
+                                    "Mismatch at {}\n  expected: {}\n  actual: {}\n{}",
+                                    path, nominal, actual, kind
                                 )),
+
                                 _ => None,
                             })
                             .collect();
