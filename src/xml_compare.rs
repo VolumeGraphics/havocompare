@@ -62,13 +62,6 @@ impl Range {
             });
         }
 
-        if self.min < 0.0 || self.max < 0.0 {
-            return Err(XMLCompareError::NegativeRange {
-                min: self.min,
-                max: self.max,
-            });
-        }
-
         Ok(())
     }
 }
@@ -123,9 +116,6 @@ pub enum XMLCompareError {
 
     #[error("Invalid range: min ({min}) > max ({max})")]
     InvalidRange { min: f64, max: f64 },
-
-    #[error("Invalid range: values must be non-negative (min={min}, max={max})")]
-    NegativeRange { min: f64, max: f64 },
 }
 
 //
