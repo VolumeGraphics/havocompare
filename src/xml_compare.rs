@@ -1,4 +1,4 @@
-use crate::report::{self, DiffDetail, Difference};
+use crate::report::{self, DiffDetail, Difference, FailureKind, XMLDiffKind};
 use regex::Regex;
 use roxmltree::{Document, Node};
 use schemars_derive::JsonSchema;
@@ -298,7 +298,16 @@ fn compare_nodes<'a, 'i>(
     }
 
     if tag != actual.tag_name().name() {
-        report_error(diff, &current_path, tag, actual.tag_name().name());
+        diff.push_detail(DiffDetail::XML {
+            path: current_path.clone(),
+            nominal: tag.to_string(),
+            actual: actual.tag_name().name().to_string(),
+            kind: XMLDiffKind::TagMismatch {
+                expected: tag.to_string(),
+                found: actual.tag_name().name().to_string(),
+            },
+        });
+        diff.error();
         return;
     }
 
@@ -355,7 +364,15 @@ fn compare_attributes<'a, 'i>(
             }
             None => {
                 error!("Missing attribute {} at {}", attr_name, path);
-                diff.error();
+                diff.push_detail(DiffDetail::XML {
+                    path: path.to_string(),
+                    nominal: "".into(),
+                    actual: "".into(),
+                    kind: XMLDiffKind::AttributeMissing {
+                        name: attr_name.to_string(),
+                    },
+                });
+                diff.error()
             }
         }
     }
@@ -363,6 +380,14 @@ fn compare_attributes<'a, 'i>(
     for attr in actual.attributes() {
         if nominal.attribute(attr.name()).is_none() {
             error!("Unexpected attribute {} at {}", attr.name(), path);
+            diff.push_detail(DiffDetail::XML {
+                path: path.to_string(),
+                nominal: "".into(),
+                actual: "".into(),
+                kind: XMLDiffKind::AttributeUnexpected {
+                    name: attr.name().to_string(),
+                },
+            });
             diff.error();
         }
     }
@@ -389,14 +414,31 @@ fn compare_text_values(
             if let Some(rule) = &config.vector {
                 for i in 0..3 {
                     let axis_rule = &rule.axes[i];
-                    if !within_tolerance(nv[i], av[i], axis_rule) {
-                        report_value_mismatch(
-                            diff,
-                            &format!("{}[{}]", path, ["x", "y", "z"][i]),
-                            &nv[i].to_string(),
-                            &av[i].to_string(),
-                            (av[i] - nv[i]).abs(),
-                        );
+
+                    match evaluate_tolerance(nv[i], av[i], axis_rule) {
+                        ToleranceResult::Passed => {}
+
+                        ToleranceResult::Failed {
+                            diff_abs,
+                            diff_rel,
+                            failure,
+                        } => {
+                            diff.push_detail(DiffDetail::XML {
+                                path: format!("{}[{}]", path, ["x", "y", "z"][i]),
+                                nominal: nv[i].to_string(),
+                                actual: av[i].to_string(),
+                                kind: XMLDiffKind::Vector {
+                                    axis: ["x", "y", "z"][i],
+                                    diff_abs,
+                                    diff_rel,
+                                    abs_range: axis_rule.abs.clone(),
+                                    rel_range: axis_rule.rel.clone(),
+                                    failed_on: failure,
+                                },
+                            });
+
+                            diff.error();
+                        }
                     }
                 }
             }
@@ -407,8 +449,31 @@ fn compare_text_values(
     // NUMERIC
     if let (Ok(nv), Ok(av)) = (n.parse::<f64>(), a.parse::<f64>()) {
         if let Some(rule) = &config.numeric {
-            if !within_tolerance(nv, av, rule) {
-                report_value_mismatch(diff, path, n, a, (av - nv).abs());
+            match evaluate_tolerance(nv, av, rule) {
+                ToleranceResult::Passed => {
+                    // ✅ Do nothing (this is your "ignore passed")
+                }
+
+                ToleranceResult::Failed {
+                    diff_abs,
+                    diff_rel,
+                    failure,
+                } => {
+                    diff.push_detail(DiffDetail::XML {
+                        path: path.to_string(),
+                        nominal: n.to_string(),
+                        actual: a.to_string(),
+                        kind: XMLDiffKind::Numeric {
+                            diff_abs,
+                            diff_rel,
+                            abs_range: rule.abs.clone(),
+                            rel_range: rule.rel.clone(),
+                            failed_on: failure,
+                        },
+                    });
+
+                    diff.error();
+                }
             }
         }
         return;
@@ -418,7 +483,17 @@ fn compare_text_values(
     if let Some(rule) = &config.string {
         let distance = normalized_damerau_levenshtein(n, a);
         if distance < rule.threshold {
-            report_value_mismatch(diff, path, n, a, distance);
+            diff.push_detail(DiffDetail::XML {
+                path: path.to_string(),
+                nominal: n.to_string(),
+                actual: a.to_string(),
+                kind: XMLDiffKind::String {
+                    similarity: distance,
+                    threshold: rule.threshold,
+                },
+            });
+
+            diff.error();
         }
     }
 }
@@ -427,7 +502,16 @@ fn compare_text_values(
 // CENTRALIZED TOLERANCE LOGIC
 //
 
-fn within_tolerance(n: f64, a: f64, rule: &NumericRule) -> bool {
+enum ToleranceResult {
+    Passed,
+    Failed {
+        diff_abs: f64,
+        diff_rel: f64,
+        failure: FailureKind,
+    },
+}
+
+fn evaluate_tolerance(n: f64, a: f64, rule: &NumericRule) -> ToleranceResult {
     let diff_abs = (a - n).abs();
     let diff_rel = if n != 0.0 {
         diff_abs / n.abs()
@@ -439,12 +523,69 @@ fn within_tolerance(n: f64, a: f64, rule: &NumericRule) -> bool {
 
     match (&rule.abs, &rule.rel) {
         (Some(abs), Some(rel)) => {
-            (diff_abs >= abs.min && diff_abs <= abs.max)
-                || (diff_rel >= rel.min && diff_rel <= rel.max)
+            let abs_ok = diff_abs >= abs.min && diff_abs <= abs.max;
+            let rel_ok = diff_rel >= rel.min && diff_rel <= rel.max;
+
+            if abs_ok || rel_ok {
+                ToleranceResult::Passed
+            } else {
+                let failure = if !abs_ok && rel_ok {
+                    FailureKind::Absolute
+                } else if abs_ok && !rel_ok {
+                    FailureKind::Relative
+                } else {
+                    FailureKind::Both
+                };
+
+                ToleranceResult::Failed {
+                    diff_abs,
+                    diff_rel,
+                    failure,
+                }
+            }
         }
-        (Some(abs), None) => diff_abs >= abs.min && diff_abs <= abs.max,
-        (None, Some(rel)) => diff_rel >= rel.min && diff_rel <= rel.max,
-        (None, None) => (n - a).abs() <= EPS,
+
+        (Some(abs), None) => {
+            let abs_ok = diff_abs >= abs.min && diff_abs <= abs.max;
+
+            if abs_ok {
+                ToleranceResult::Passed
+            } else {
+                ToleranceResult::Failed {
+                    diff_abs,
+                    diff_rel,
+                    failure: FailureKind::Absolute,
+                }
+            }
+        }
+
+        (None, Some(rel)) => {
+            let rel_ok = diff_rel >= rel.min && diff_rel <= rel.max;
+
+            if rel_ok {
+                ToleranceResult::Passed
+            } else {
+                ToleranceResult::Failed {
+                    diff_abs,
+                    diff_rel,
+                    failure: FailureKind::Relative,
+                }
+            }
+        }
+
+        (None, None) => {
+            let passed = (n - a).abs() <= EPS;
+
+            if passed {
+                ToleranceResult::Passed
+            } else {
+                ToleranceResult::Failed {
+                    diff_abs,
+                    diff_rel,
+                    failure: FailureKind::Exact,
+                }
+            }
+        }
     }
 }
 
@@ -467,39 +608,6 @@ fn parse_vector(value: &str) -> Option<[f64; 3]> {
         .ok()?;
 
     Some([coords[0], coords[1], coords[2]])
-}
-
-fn report_error(diff: &mut Difference, path: &str, expected: &str, found: &str) {
-    let msg = format!(
-        "Tag mismatch at {}: expected '{}' found '{}'",
-        path, expected, found
-    );
-    error!("{}", msg);
-    diff.error();
-}
-
-fn report_value_mismatch(
-    diff: &mut Difference,
-    path: &str,
-    nominal: &str,
-    actual: &str,
-    score: f64,
-) {
-    let msg = format!(
-        "Mismatch at {}: expected '{}' found '{}' (score: {})",
-        path, nominal, actual, score
-    );
-
-    error!("{}", msg);
-
-    diff.push_detail(DiffDetail::Text {
-        actual: actual.to_string(),
-        nominal: nominal.to_string(),
-        score,
-        line: 0,
-    });
-
-    diff.error();
 }
 
 fn normalize_invalid_tags(input: &str, config: &CompiledXMLConfig) -> String {

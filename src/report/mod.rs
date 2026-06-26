@@ -3,6 +3,7 @@ mod template;
 use crate::csv::{DiffType, Position, Table};
 use crate::directory::DirectoryConfig;
 use crate::properties::MetaDataPropertyDiff;
+use crate::xml_compare::Range;
 use crate::{CSVCompareConfig, ComparisonMode, Rule};
 use pdf_extract::extract_text;
 use serde::Serialize;
@@ -139,6 +140,12 @@ pub enum DiffDetail {
         line: usize,
         score: f64,
     },
+    XML {
+        path: String,
+        nominal: String,
+        actual: String,
+        kind: XMLDiffKind,
+    },
     Hash {
         actual: String,
         nominal: String,
@@ -160,6 +167,47 @@ pub enum DiffDetail {
         nominal: String,
         error: bool,
     },
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub enum XMLDiffKind {
+    Numeric {
+        diff_abs: f64,
+        diff_rel: f64,
+        abs_range: Option<Range>,
+        rel_range: Option<Range>,
+        failed_on: FailureKind,
+    },
+    Vector {
+        axis: &'static str,
+        diff_abs: f64,
+        diff_rel: f64,
+        abs_range: Option<Range>,
+        rel_range: Option<Range>,
+        failed_on: FailureKind,
+    },
+    String {
+        similarity: f64,
+        threshold: f64,
+    },
+    TagMismatch {
+        expected: String,
+        found: String,
+    },
+    AttributeMissing {
+        name: String,
+    },
+    AttributeUnexpected {
+        name: String,
+    },
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub enum FailureKind {
+    Absolute,
+    Relative,
+    Both,
+    Exact,
 }
 
 pub fn create_detail_folder(report_dir: impl AsRef<Path>) -> Result<DetailPath, Error> {
