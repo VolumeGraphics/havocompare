@@ -116,18 +116,34 @@ pub enum XMLCompareError {
 
     #[error("Invalid range: min ({min}) > max ({max})")]
     InvalidRange { min: f64, max: f64 },
+
+    #[error(
+        "Tag '{tag}' was configured as an invalid tag but appears as a valid XML attribute. \
+        Expected invalid syntax like '<Time expected>' but found '<Time expected=\"...\">'"
+    )]
+    AmbiguousInvalidTag { tag: String },
+
+    #[error("Invalid ignore_tags declared: {tag} - only support on space in tag name e.g. 'Time expected'")]
+    InvalidIgnoreTag { tag: String },
 }
 
 //
 // ================= COMPILED CONFIG =================
 //
+struct InvalidTagPattern {
+    invalid_open: Regex,
+    invalid_close: Regex,
+    attribute_usage: Regex,
+    original: String,
+    normalized: String,
+}
 
 struct CompiledXMLConfig {
     ignore_tags: Vec<Regex>,
     numeric: Option<NumericRule>,
     string: Option<StringRule>,
     vector: Option<VectorRule>,
-    invalid_tag_patterns: Vec<(Regex, Regex, String)>,
+    invalid_tag_patterns: Vec<InvalidTagPattern>,
 }
 
 struct NumericRule {
@@ -143,15 +159,30 @@ struct VectorRule {
     axes: [NumericRule; 3],
 }
 
+impl InvalidTagPattern {
+    fn from_invalid_tag(tag: &str) -> Result<Self, regex::Error> {
+        let tag_escaped = regex::escape(tag);
+
+        Ok(Self {
+            invalid_open: Regex::new(&format!(r"<\s*{}(\s|>)", tag_escaped))?,
+
+            invalid_close: Regex::new(&format!(r"</\s*{}\s*>", tag_escaped))?,
+
+            attribute_usage: Regex::new("$^")?,
+
+            original: tag.to_string(),
+
+            normalized: if tag.starts_with('_') {
+                tag.to_string()
+            } else {
+                format!("_{}", tag)
+            },
+        })
+    }
+}
+
 impl XMLCompareConfig {
     fn compile(&self) -> Result<CompiledXMLConfig, XMLCompareError> {
-        let ignore_tags = self
-            .ignore_tags
-            .as_ref()
-            .map(|tags| tags.iter().map(|t| glob_to_regex(t)).collect())
-            .transpose()?
-            .unwrap_or_default();
-
         let mut numeric = None;
         let mut string = None;
         let mut vector = None;
@@ -209,18 +240,64 @@ impl XMLCompareConfig {
             }
         }
 
+        let mut normalized_ignore_tags = Vec::new();
         let mut invalid_tag_patterns = Vec::new();
 
         if let Some(tags) = &self.invalid_tags {
             for tag in tags {
-                let tag_escaped = regex::escape(tag);
-
-                let open = Regex::new(&format!(r"<\s*{}(\s|>)", tag_escaped))?;
-                let close = Regex::new(&format!(r"</\s*{}\s*>", tag_escaped))?;
-
-                invalid_tag_patterns.push((open, close, tag.clone()));
+                invalid_tag_patterns.push(InvalidTagPattern::from_invalid_tag(tag)?);
             }
         }
+
+        if let Some(tags) = &self.ignore_tags {
+            for tag in tags {
+                if tag.contains(' ') {
+                    let normalized = tag.replace(' ', "_");
+                    let parts: Vec<_> = tag.split_whitespace().collect();
+
+                    if parts.len() != 2 {
+                        return Err(XMLCompareError::InvalidIgnoreTag { tag: tag.clone() });
+                    }
+
+                    if parts.len() == 2 {
+                        let tag_name = parts[0];
+                        let pseudo_tag = parts[1];
+
+                        invalid_tag_patterns.push(InvalidTagPattern {
+                            invalid_open: Regex::new(&format!(
+                                r"<{}\s+{}\s*>",
+                                regex::escape(tag_name),
+                                regex::escape(pseudo_tag)
+                            ))?,
+
+                            invalid_close: Regex::new(&format!(
+                                r"</{}\s+{}\s*>",
+                                regex::escape(tag_name),
+                                regex::escape(pseudo_tag)
+                            ))?,
+
+                            attribute_usage: Regex::new(&format!(
+                                r"<{}\s+{}\s*=",
+                                regex::escape(tag_name),
+                                regex::escape(pseudo_tag)
+                            ))?,
+
+                            original: tag.clone(),
+                            normalized: normalized.clone(),
+                        });
+                    }
+
+                    normalized_ignore_tags.push(normalized);
+                } else {
+                    normalized_ignore_tags.push(tag.clone());
+                }
+            }
+        }
+
+        let ignore_tags: Vec<Regex> = normalized_ignore_tags
+            .iter()
+            .map(|t| glob_to_regex(t))
+            .collect::<Result<_, _>>()?;
 
         Ok(CompiledXMLConfig {
             ignore_tags,
@@ -250,8 +327,8 @@ pub fn compare_files<P: AsRef<Path>>(
     let actual_text = std::fs::read_to_string(&actual_path)?;
     let compiled = config.compile()?;
 
-    let nominal_text = normalize_invalid_tags(&nominal_text, &compiled);
-    let actual_text = normalize_invalid_tags(&actual_text, &compiled);
+    let nominal_text = normalize_invalid_tags(&nominal_text, &compiled)?;
+    let actual_text = normalize_invalid_tags(&actual_text, &compiled)?;
 
     let nominal_doc = Document::parse(&nominal_text)?;
     let actual_doc = Document::parse(&actual_text)?;
@@ -600,28 +677,33 @@ fn parse_vector(value: &str) -> Option<[f64; 3]> {
     Some([coords[0], coords[1], coords[2]])
 }
 
-fn normalize_invalid_tags(input: &str, config: &CompiledXMLConfig) -> String {
+fn normalize_invalid_tags(
+    input: &str,
+    config: &CompiledXMLConfig,
+) -> Result<String, XMLCompareError> {
     if config.invalid_tag_patterns.is_empty() {
-        return input.to_string();
+        return Ok(input.to_string());
     }
 
     let mut output = input.to_string();
 
-    for (open_re, close_re, tag) in &config.invalid_tag_patterns {
-        let prefixed = if tag.starts_with('_') {
-            tag.clone()
-        } else {
-            format!("_{}", tag)
-        };
+    for pattern in &config.invalid_tag_patterns {
+        if pattern.attribute_usage.is_match(&output) {
+            return Err(XMLCompareError::AmbiguousInvalidTag {
+                tag: pattern.original.clone(),
+            });
+        }
 
-        output = open_re
-            .replace_all(&output, format!("<{}$1", prefixed).as_str())
+        output = pattern
+            .invalid_open
+            .replace_all(&output, format!("<{}>", pattern.normalized).as_str())
             .to_string();
 
-        output = close_re
-            .replace_all(&output, format!("</{}>", prefixed).as_str())
+        output = pattern
+            .invalid_close
+            .replace_all(&output, format!("</{}>", pattern.normalized).as_str())
             .to_string();
     }
 
-    output
+    Ok(output)
 }
