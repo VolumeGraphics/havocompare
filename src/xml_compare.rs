@@ -116,6 +116,12 @@ pub enum XMLCompareError {
 
     #[error("Invalid range: min ({min}) > max ({max})")]
     InvalidRange { min: f64, max: f64 },
+
+    #[error("UTF-8 decode error: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error("UTF-16 decode error: {0}")]
+    Utf16(#[from] std::string::FromUtf16Error),
 }
 
 //
@@ -246,8 +252,8 @@ pub fn compare_files<P: AsRef<Path>>(
     actual_path: P,
     config: &XMLCompareConfig,
 ) -> Result<Difference, XMLCompareError> {
-    let nominal_text = std::fs::read_to_string(&nominal_path)?;
-    let actual_text = std::fs::read_to_string(&actual_path)?;
+    let nominal_text = read_xml_file(&nominal_path)?;
+    let actual_text = read_xml_file(&actual_path)?;
     let compiled = config.compile()?;
 
     let nominal_text = normalize_invalid_tags(&nominal_text, &compiled);
@@ -582,6 +588,32 @@ fn evaluate_tolerance(n: f64, a: f64, rule: &NumericRule) -> ToleranceResult {
 //
 // ================= HELPERS =================
 //
+
+fn read_xml_file<P: AsRef<Path>>(path: P) -> Result<String, XMLCompareError> {
+    let path = path.as_ref();
+
+    let bytes = std::fs::read(path)?;
+
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        let utf16: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+
+        return Ok(String::from_utf16(&utf16)?);
+    }
+
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        let utf16: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_be_bytes([c[0], c[1]]))
+            .collect();
+
+        return Ok(String::from_utf16(&utf16)?);
+    }
+
+    Ok(String::from_utf8(bytes)?)
+}
 
 fn parse_vector(value: &str) -> Option<[f64; 3]> {
     let trimmed = value.trim().trim_start_matches('(').trim_end_matches(')');
